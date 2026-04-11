@@ -27,8 +27,8 @@ async def test_switch_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 10 switch entities
-    assert len(entities) == 10
+    # Should create 13 switch entities
+    assert len(entities) == 13
     assert entities[0].entity_description.key == "lb_enable_phase_switching"
     assert entities[1].entity_description.key == "dp_light_auto_dim"
 

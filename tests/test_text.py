@@ -29,8 +29,8 @@ async def test_text_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 5 text entities
-    assert len(entities) == 5
+    # Should create 7 text entities
+    assert len(entities) == 7
     assert entities[0].entity_description.key == "auth_plug_and_charge_id"
     assert entities[1].entity_description.key == "proxy_address_port"
 
