@@ -208,6 +208,9 @@
         "disable_phase_switching": "mdi:swap-horizontal",
         "set_green_share": "mdi:solar-power",
         "set_comfort_power": "mdi:solar-power-variant",
-        "get_transactions": "mdi:history"
+        "get_transactions": "mdi:history",
+        "get_charging_profiles": "mdi:calendar-clock",
+        "add_charging_profile": "mdi:calendar-plus",
+        "clear_charging_profiles": "mdi:calendar-remove"
     }
 }

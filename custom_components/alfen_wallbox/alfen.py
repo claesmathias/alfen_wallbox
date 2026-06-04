@@ -26,6 +26,7 @@ from .const import (
     CAT_STATES,
     CAT_TRANSACTIONS,
     CATEGORIES,
+    CHARGING_PROFILES,
     CMD,
     COMMAND_CLEAR_TRANSACTIONS,
     COMMAND_REBOOT,
@@ -1117,6 +1118,27 @@ class AlfenDevice:
         """Clear the transactions."""
         response = await self._post(cmd=CMD, payload={PARAM_COMMAND: COMMAND_CLEAR_TRANSACTIONS})
         _LOGGER.debug("[%s] Clear Transactions response %s", self.log_id, str(response))
+
+    async def get_charging_profiles(self) -> list[dict]:
+        """Get all charging profiles."""
+        response = await self._get(url=self.__get_url(f"{CHARGING_PROFILES}?cpid=-19930828"))
+        if response is None:
+            return []
+        if isinstance(response, list):
+            return response
+        if isinstance(response, dict):
+            return [response]
+        return []
+
+    async def add_charging_profile(self, schedule: dict[str, Any]) -> None:
+        """Add a charging profile."""
+        response = await self._post(cmd=f"{CHARGING_PROFILES}?add", payload=schedule)
+        _LOGGER.debug("[%s] Add Charging Profile response %s", self.log_id, str(response))
+
+    async def clear_charging_profiles(self) -> None:
+        """Clear all charging profiles."""
+        response = await self._post(cmd=f"{CHARGING_PROFILES}?clear=all", payload=None)
+        _LOGGER.debug("[%s] Clear Charging Profiles response %s", self.log_id, str(response))
 
     async def send_command(self, command: dict[str, Any]) -> None:
         """Run a command."""

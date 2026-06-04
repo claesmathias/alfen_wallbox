@@ -172,6 +172,56 @@
                     "description": "Einddatum voor transactiefilter."
                 }
             }
+        },
+        "get_charging_profiles": {
+            "name": "Get charging profiles",
+            "description": "Retrieves all charging profiles from the wallbox.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to query."
+                }
+            }
+        },
+        "add_charging_profile": {
+            "name": "Add charging profile",
+            "description": "Adds a charging schedule timeslot to the wallbox.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to configure."
+                },
+                "start_time": {
+                    "name": "Start time",
+                    "description": "Start time for the charging timeslot (HH:MM)."
+                },
+                "stop_time": {
+                    "name": "Stop time",
+                    "description": "Stop time for the charging timeslot (HH:MM)."
+                },
+                "max_current": {
+                    "name": "Max current",
+                    "description": "Maximum charging current in Amperes (1-32A)."
+                },
+                "recurrency": {
+                    "name": "Recurrence",
+                    "description": "Recurrence type: DAILY or WEEKLY."
+                },
+                "days": {
+                    "name": "Days",
+                    "description": "Days of the week for WEEKLY recurrence."
+                }
+            }
+        },
+        "clear_charging_profiles": {
+            "name": "Clear charging profiles",
+            "description": "Clears all charging profiles from the wallbox.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to configure."
+                }
+            }
         }
     },
     "entity": {

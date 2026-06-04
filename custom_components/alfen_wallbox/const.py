@@ -45,6 +45,8 @@ CAT_LOGS = "logs"
 COMMAND_REBOOT = "reboot"
 COMMAND_CLEAR_TRANSACTIONS = "txerase"
 
+CHARGING_PROFILES = "chargingprofiles"
+
 CONF_REFRESH_CATEGORIES = "refresh_categories"
 
 DEFAULT_REFRESH_CATEGORIES = (
@@ -108,6 +110,9 @@ SERVICE_ENABLE_PHASE_SWITCHING = "enable_phase_switching"
 SERVICE_DISABLE_PHASE_SWITCHING = "disable_phase_switching"
 SERVICE_SET_GREEN_SHARE = "set_green_share"
 SERVICE_SET_COMFORT_POWER = "set_comfort_power"
+SERVICE_GET_CHARGING_PROFILES = "get_charging_profiles"
+SERVICE_ADD_CHARGING_PROFILE = "add_charging_profile"
+SERVICE_CLEAR_CHARGING_PROFILES = "clear_charging_profiles"
 
 ALFEN_PRODUCT_MAP = {
     "NG900-60503": "Eve Single S-line, 1 phase, LED, type 2 socket",

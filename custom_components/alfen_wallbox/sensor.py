@@ -2,7 +2,9 @@
 
 from dataclasses import dataclass
 import datetime
-from typing import Final
+from typing import Any, Final
+
+import voluptuous as vol
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -21,12 +23,21 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
-from homeassistant.core import HomeAssistant, callback
+import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant, SupportsResponse, callback
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
 
-from .const import CAT, ID, SERVICE_REBOOT_WALLBOX, VALUE
+from .const import (
+    CAT,
+    ID,
+    SERVICE_ADD_CHARGING_PROFILE,
+    SERVICE_CLEAR_CHARGING_PROFILES,
+    SERVICE_GET_CHARGING_PROFILES,
+    SERVICE_REBOOT_WALLBOX,
+    VALUE,
+)
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
 
@@ -1700,6 +1711,37 @@ async def async_setup_entry(
             "async_reboot_wallbox",
         )
 
+        platform.async_register_entity_service(
+            SERVICE_GET_CHARGING_PROFILES,
+            {},
+            "async_get_charging_profiles",
+            supports_response=SupportsResponse.ONLY,
+        )
+
+        platform.async_register_entity_service(
+            SERVICE_ADD_CHARGING_PROFILE,
+            {
+                vol.Required("start_time"): cv.string,
+                vol.Required("stop_time"): cv.string,
+                vol.Required("max_current"): vol.All(vol.Coerce(int), vol.Range(min=1, max=32)),
+                vol.Optional("recurrency", default="DAILY"): vol.In(["DAILY", "WEEKLY"]),
+                vol.Optional("days", default=[]): vol.All(
+                    [
+                        vol.In(
+                            ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                        )
+                    ]
+                ),
+            },
+            "async_add_charging_profile",
+        )
+
+        platform.async_register_entity_service(
+            SERVICE_CLEAR_CHARGING_PROFILES,
+            {},
+            "async_clear_charging_profiles",
+        )
+
 
 class AlfenMainSensor(AlfenEntity):
     """Representation of a Alfen Main Sensor."""
@@ -1761,6 +1803,57 @@ class AlfenMainSensor(AlfenEntity):
     async def async_reboot_wallbox(self):
         """Reboot the wallbox."""
         await self.coordinator.device.reboot_wallbox()
+
+    async def async_get_charging_profiles(self) -> dict[str, Any]:
+        """Get all charging profiles."""
+        profiles = await self.coordinator.device.get_charging_profiles()
+        return {"charging_profiles": profiles}
+
+    async def async_add_charging_profile(self, start_time: str, stop_time: str, max_current: int, recurrency: str, days: list[str]) -> None:
+        """Add a charging profile."""
+        # Parse start/stop times into minutes-since-midnight (startPeriod)
+        start_h, start_m = (int(x) for x in start_time.split(":"))
+        stop_h, stop_m = (int(x) for x in stop_time.split(":"))
+        start_period = start_h * 3600 + start_m * 60
+        stop_period = stop_h * 3600 + stop_m * 60
+
+        # Duration in seconds from start to stop
+        duration = stop_period - start_period
+        if duration <= 0:
+            duration += 24 * 3600  # handle midnight wrap-around
+
+        schedule: dict[str, Any] = {
+            "chargingProfileId": -19930828,
+            "stackLevel": 0,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Recurring",
+            "recurrencyKind": recurrency,
+            "chargingSchedule": {
+                "chargingRateUnit": "A",
+                "duration": duration,
+                "chargingSchedulePeriod": [
+                    {
+                        "startPeriod": start_period,
+                        "limit": max_current,
+                        "numberPhases": self.coordinator.device.max_allowed_phases,
+                    },
+                    {
+                        "startPeriod": stop_period,
+                        "limit": 0,
+                        "numberPhases": self.coordinator.device.max_allowed_phases,
+                    },
+                ],
+            },
+        }
+
+        if recurrency == "WEEKLY" and days:
+            schedule["daysOfWeek"] = days
+
+        await self.coordinator.device.add_charging_profile(schedule)
+
+    async def async_clear_charging_profiles(self) -> None:
+        """Clear all charging profiles."""
+        await self.coordinator.device.clear_charging_profiles()
 
     async def async_update(self):
         """Update the sensor."""
