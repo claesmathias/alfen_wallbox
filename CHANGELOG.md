@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.4] - 2026-06-05
+
+### Fixed
+
+- **Fixed Force Fetch Transaction button not loading Insights** — the force flag was blocked by the `if CAT_TRANSACTIONS in category_options` check, meaning pressing the button had no effect unless `transactions` was already in the refresh categories. The force flag now bypasses the category check so the button always fetches transactions immediately regardless of options
+
 ## [3.5.3] - 2026-06-05
 
 ### Fixed

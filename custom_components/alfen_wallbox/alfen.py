@@ -479,10 +479,12 @@ class AlfenDevice:
             if self.log_counter == 0:
                 await self._get_log()
 
-        if CAT_TRANSACTIONS in self.category_options:
+        if self.force_update_transaction:
+            self.force_update_transaction = False
+            await self._get_transaction()
+        elif CAT_TRANSACTIONS in self.category_options:
             self.transaction_counter = (self.transaction_counter + 1) % transaction_cycles
-            if self.transaction_counter == 0 or self.force_update_transaction is True:
-                self.force_update_transaction = False
+            if self.transaction_counter == 0:
                 await self._get_transaction()
 
         # schedule_counter starts at -1 so the first increment to 0 triggers fetch immediately
