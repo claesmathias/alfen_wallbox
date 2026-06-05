@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.3] - 2026-06-05
+
+### Fixed
+
+- **Fixed `ValueError` for solar power sensor** — when the wallbox returns an empty string for a numeric property (e.g. `sensor.garage_alfen_solar_power`), the sensor now returns `None` (unavailable) instead of `''`, preventing HA from raising a `ValueError` on every coordinator update cycle
+
 ## [3.5.2] - 2026-06-05
 
 ### Added

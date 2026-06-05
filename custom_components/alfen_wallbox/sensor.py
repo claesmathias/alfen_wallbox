@@ -2316,7 +2316,10 @@ class AlfenSensor(AlfenEntity, SensorEntity):
             if self.entity_description.api_param in ("2501_2", "2502_2"):
                 return STATUS_DICT.get(prop[VALUE], "Unknown")
 
-            return prop[VALUE]
+            value = prop[VALUE]
+            if value == "":
+                return None
+            return value
         return None
 
     @property
