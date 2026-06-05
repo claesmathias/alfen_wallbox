@@ -174,52 +174,52 @@
             }
         },
         "get_charging_profiles": {
-            "name": "Get charging profiles",
-            "description": "Retrieves all charging profiles from the wallbox.",
+            "name": "Hämta laddningsprofiler",
+            "description": "Hämtar alla laddningsprofiler från wallboxen.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to query."
+                    "name": "Enhet",
+                    "description": "Wallbox-enheten att fråga."
                 }
             }
         },
         "add_charging_profile": {
-            "name": "Add charging profile",
-            "description": "Adds a charging schedule timeslot to the wallbox.",
+            "name": "Lägg till laddningsprofil",
+            "description": "Lägger till ett laddningsschema-tidsfönster till wallboxen.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Enhet",
+                    "description": "Wallbox-enheten att konfigurera."
                 },
                 "start_time": {
-                    "name": "Start time",
-                    "description": "Start time for the charging timeslot (HH:MM)."
+                    "name": "Starttid",
+                    "description": "Starttid för laddningstidsfönstret (TT:MM)."
                 },
                 "stop_time": {
-                    "name": "Stop time",
-                    "description": "Stop time for the charging timeslot (HH:MM)."
+                    "name": "Stopptid",
+                    "description": "Stopptid för laddningstidsfönstret (TT:MM)."
                 },
                 "max_current": {
-                    "name": "Max current",
-                    "description": "Maximum charging current in Amperes (1-32A)."
+                    "name": "Max ström",
+                    "description": "Maximal laddningsström i ampere (1-32A)."
                 },
                 "recurrency": {
-                    "name": "Recurrence",
-                    "description": "Recurrence type: DAILY or WEEKLY."
+                    "name": "Återkommande",
+                    "description": "Återkomsttyp: DAILY eller WEEKLY."
                 },
                 "days": {
-                    "name": "Days",
-                    "description": "Days of the week for WEEKLY recurrence."
+                    "name": "Dagar",
+                    "description": "Veckodagar för WEEKLY återkomst."
                 }
             }
         },
         "clear_charging_profiles": {
-            "name": "Clear charging profiles",
-            "description": "Clears all charging profiles from the wallbox.",
+            "name": "Rensa laddningsprofiler",
+            "description": "Rensar alla laddningsprofiler från wallboxen.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Enhet",
+                    "description": "Wallbox-enheten att konfigurera."
                 }
             }
         }
@@ -296,7 +296,7 @@
                 "name": "Senaste konfigändring"
             },
             "charging_schedule": {
-                "name": "Charging schedule"
+                "name": "Laddningsschema"
             },
             "solar_power": {
                 "name": "Solkraft"
@@ -417,13 +417,16 @@
                 "name": "Rensa transaktioner"
             },
             "clear_charging_profiles": {
-                "name": "Clear charging schedule"
+                "name": "Rensa laddningsschema"
+            },
+            "refresh_charging_schedule": {
+                "name": "Uppdatera laddningsschema"
             },
             "enable_boost_mode": {
-                "name": "Enable boost mode"
+                "name": "Aktivera boostläge"
             },
             "stop_boost_mode": {
-                "name": "Stop boost mode"
+                "name": "Stoppa boostläge"
             },
             "pause_charging": {
                 "name": "Pausa laddning"

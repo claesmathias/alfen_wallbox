@@ -194,6 +194,9 @@
             "clear_charging_profiles": {
                 "default": "mdi:calendar-remove"
             },
+            "refresh_charging_schedule": {
+                "default": "mdi:calendar-refresh"
+            },
             "enable_boost_mode": {
                 "default": "mdi:lightning-bolt"
             },

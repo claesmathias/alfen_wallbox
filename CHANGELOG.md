@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.2] - 2026-06-05
+
+### Added
+
+- **Refresh Charging Schedule button** — new button entity that immediately fetches the latest charging profiles from the wallbox, useful after editing a schedule in Eve Connect without waiting for the next automatic refresh
+- **Charging schedule auto-refresh reduced to ~5 minutes** (was ~20 minutes) — profiles are now re-fetched every 5 minutes instead of 20, reducing stale schedule data on the calendar and sensors
+
+### Fixed
+
+- **All non-English translation files fully translated** — service names, descriptions, field labels, and entity names that were previously left in English have been translated into Dutch, German, French, Spanish, Italian, Swedish, Norwegian, and Danish
+
+### Documentation
+
+- Updated README with Charging Schedule Calendar section including weekly/daily Lovelace card examples and `initial_view` reference table
+- Added Insights (charging sessions) section documenting the sensor and its attributes
+- Added service examples for `add_charging_profile` (daily, weekly specific days, all 7 days) and `clear_charging_profiles`
+
 ## [3.5.1] - 2026-06-05
 
 ### Fixed

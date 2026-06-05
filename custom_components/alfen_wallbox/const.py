@@ -19,6 +19,7 @@ INFO = "info"
 LOGIN = "login"
 LOGOUT = "logout"
 FORCE_TRANSACTION_UPDATE = "Force Transaction Update"
+REFRESH_CHARGING_SCHEDULE = "Refresh Charging Schedule"
 
 
 PARAM_USERNAME = "username"

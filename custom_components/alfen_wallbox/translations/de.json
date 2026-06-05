@@ -174,52 +174,52 @@
             }
         },
         "get_charging_profiles": {
-            "name": "Get charging profiles",
-            "description": "Retrieves all charging profiles from the wallbox.",
+            "name": "Ladeprofile abrufen",
+            "description": "Ruft alle Ladeprofile von der Wallbox ab.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to query."
+                    "name": "Entität",
+                    "description": "Die Wallbox-Entität, die abgefragt werden soll."
                 }
             }
         },
         "add_charging_profile": {
-            "name": "Add charging profile",
-            "description": "Adds a charging schedule timeslot to the wallbox.",
+            "name": "Ladeprofil hinzufügen",
+            "description": "Fügt einen Zeitslot für den Ladeplan zur Wallbox hinzu.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Entität",
+                    "description": "Die zu konfigurierende Wallbox-Entität."
                 },
                 "start_time": {
-                    "name": "Start time",
-                    "description": "Start time for the charging timeslot (HH:MM)."
+                    "name": "Startzeit",
+                    "description": "Startzeit für den Ladezeitslot (HH:MM)."
                 },
                 "stop_time": {
-                    "name": "Stop time",
-                    "description": "Stop time for the charging timeslot (HH:MM)."
+                    "name": "Endzeit",
+                    "description": "Endzeit für den Ladezeitslot (HH:MM)."
                 },
                 "max_current": {
-                    "name": "Max current",
-                    "description": "Maximum charging current in Amperes (1-32A)."
+                    "name": "Max. Strom",
+                    "description": "Maximaler Ladestrom in Ampere (1-32A)."
                 },
                 "recurrency": {
-                    "name": "Recurrence",
-                    "description": "Recurrence type: DAILY or WEEKLY."
+                    "name": "Wiederholung",
+                    "description": "Wiederholungstyp: DAILY oder WEEKLY."
                 },
                 "days": {
-                    "name": "Days",
-                    "description": "Days of the week for WEEKLY recurrence."
+                    "name": "Tage",
+                    "description": "Wochentage für die WÖCHENTLICHE Wiederholung."
                 }
             }
         },
         "clear_charging_profiles": {
-            "name": "Clear charging profiles",
-            "description": "Clears all charging profiles from the wallbox.",
+            "name": "Ladeprofile löschen",
+            "description": "Löscht alle Ladeprofile von der Wallbox.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Entität",
+                    "description": "Die zu konfigurierende Wallbox-Entität."
                 }
             }
         }
@@ -296,7 +296,7 @@
                 "name": "Letzte Konfigurationsänderung"
             },
             "charging_schedule": {
-                "name": "Charging schedule"
+                "name": "Ladeplan"
             },
             "solar_power": {
                 "name": "Solarleistung"
@@ -417,13 +417,16 @@
                 "name": "Transaktionen löschen"
             },
             "clear_charging_profiles": {
-                "name": "Clear charging schedule"
+                "name": "Ladeplan löschen"
+            },
+            "refresh_charging_schedule": {
+                "name": "Ladeplan aktualisieren"
             },
             "enable_boost_mode": {
-                "name": "Enable boost mode"
+                "name": "Boost-Modus aktivieren"
             },
             "stop_boost_mode": {
-                "name": "Stop boost mode"
+                "name": "Boost-Modus stoppen"
             },
             "pause_charging": {
                 "name": "Laden pausieren"

@@ -174,52 +174,52 @@
             }
         },
         "get_charging_profiles": {
-            "name": "Get charging profiles",
-            "description": "Retrieves all charging profiles from the wallbox.",
+            "name": "Laadprofielen ophalen",
+            "description": "Haalt alle laadprofielen op van de wallbox.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to query."
+                    "name": "Entiteit",
+                    "description": "De wallbox-entiteit om op te vragen."
                 }
             }
         },
         "add_charging_profile": {
-            "name": "Add charging profile",
-            "description": "Adds a charging schedule timeslot to the wallbox.",
+            "name": "Laadprofiel toevoegen",
+            "description": "Voegt een laadschema-tijdslot toe aan de wallbox.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Entiteit",
+                    "description": "De wallbox-entiteit om te configureren."
                 },
                 "start_time": {
-                    "name": "Start time",
-                    "description": "Start time for the charging timeslot (HH:MM)."
+                    "name": "Begintijd",
+                    "description": "Begintijd voor het laadtijdslot (UU:MM)."
                 },
                 "stop_time": {
-                    "name": "Stop time",
-                    "description": "Stop time for the charging timeslot (HH:MM)."
+                    "name": "Eindtijd",
+                    "description": "Eindtijd voor het laadtijdslot (UU:MM)."
                 },
                 "max_current": {
-                    "name": "Max current",
-                    "description": "Maximum charging current in Amperes (1-32A)."
+                    "name": "Maximale stroom",
+                    "description": "Maximale laadstroom in Ampère (1-32A)."
                 },
                 "recurrency": {
-                    "name": "Recurrence",
-                    "description": "Recurrence type: DAILY or WEEKLY."
+                    "name": "Herhaling",
+                    "description": "Herhalingstype: DAILY of WEEKLY."
                 },
                 "days": {
-                    "name": "Days",
-                    "description": "Days of the week for WEEKLY recurrence."
+                    "name": "Dagen",
+                    "description": "Dagen van de week voor WEKELIJKSE herhaling."
                 }
             }
         },
         "clear_charging_profiles": {
-            "name": "Clear charging profiles",
-            "description": "Clears all charging profiles from the wallbox.",
+            "name": "Laadprofielen wissen",
+            "description": "Wist alle laadprofielen van de wallbox.",
             "fields": {
                 "entity_id": {
-                    "name": "Entity",
-                    "description": "The wallbox entity to configure."
+                    "name": "Entiteit",
+                    "description": "De wallbox-entiteit om te configureren."
                 }
             }
         }
@@ -233,7 +233,7 @@
                 "name": "Status stopcontact 2"
             },
             "uptime": {
-                "name": "Uptime"
+                "name": "Bedrijfstijd"
             },
             "uptime_seconds": {
                 "name": "Uptime seconden"
@@ -296,7 +296,7 @@
                 "name": "Laatste configuratiewijziging"
             },
             "charging_schedule": {
-                "name": "Charging schedule"
+                "name": "Laadschema"
             },
             "solar_power": {
                 "name": "Zonnestroom"
@@ -331,7 +331,7 @@
                 "name": "Licentie: Giro-e betaling"
             },
             "https_api_login_status": {
-                "name": "API login status"
+                "name": "API-inlogstatus"
             }
         },
         "number": {
@@ -357,7 +357,7 @@
                 "name": "Display helderheid"
             },
             "heartbeat_interval": {
-                "name": "Heartbeat interval"
+                "name": "Heartbeat-interval"
             }
         },
         "select": {
@@ -417,13 +417,16 @@
                 "name": "Wis transacties"
             },
             "clear_charging_profiles": {
-                "name": "Clear charging schedule"
+                "name": "Laadschema wissen"
+            },
+            "refresh_charging_schedule": {
+                "name": "Laadschema vernieuwen"
             },
             "enable_boost_mode": {
-                "name": "Enable boost mode"
+                "name": "Boostmodus inschakelen"
             },
             "stop_boost_mode": {
-                "name": "Stop boost mode"
+                "name": "Boostmodus stoppen"
             },
             "pause_charging": {
                 "name": "Laden pauzeren"

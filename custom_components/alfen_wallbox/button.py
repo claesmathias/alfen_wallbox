@@ -20,6 +20,7 @@ from .const import (
     METHOD_POST,
     PARAM_COMMAND,
     PAUSE_CHARGING,
+    REFRESH_CHARGING_SCHEDULE,
     RESUME_CHARGING,
     STOP_BOOST_MODE,
 )
@@ -89,6 +90,13 @@ ALFEN_BUTTON_TYPES: Final[tuple[AlfenButtonDescription, ...]] = (
         name="Clear Charging Schedule",
         method=METHOD_POST,
         url_action=CLEAR_CHARGING_PROFILES,
+        json_data=None,
+    ),
+    AlfenButtonDescription(
+        key="refresh_charging_schedule",
+        name="Refresh Charging Schedule",
+        method="",
+        url_action=REFRESH_CHARGING_SCHEDULE,
         json_data=None,
     ),
     AlfenButtonDescription(
@@ -172,6 +180,10 @@ class AlfenButton(AlfenEntity, ButtonEntity):
 
         if self.entity_description.url_action == CLEAR_CHARGING_PROFILES:
             await self.coordinator.device.clear_charging_profiles()
+            return
+
+        if self.entity_description.url_action == REFRESH_CHARGING_SCHEDULE:
+            await self.coordinator.device.async_update_charging_profiles()
             return
 
         if self.entity_description.url_action == BOOST_MODE:

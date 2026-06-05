@@ -472,7 +472,7 @@ class AlfenDevice:
         # regardless of how fast or slow the update interval is configured.
         log_cycles = max(1, round(420 / self.scan_interval))        # ~7 min
         transaction_cycles = max(1, round(1200 / self.scan_interval))  # ~20 min
-        schedule_cycles = max(1, round(1200 / self.scan_interval))     # ~20 min
+        schedule_cycles = max(1, round(300 / self.scan_interval))       # ~5 min
 
         if CAT_LOGS in self.category_options:
             self.log_counter = (self.log_counter + 1) % log_cycles

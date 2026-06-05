@@ -7,6 +7,14 @@ The component is a fork of the [Garo Wallbox custom integration](https://github.
 
 ## Recent Improvements
 
+### Charging Schedule Calendar & Insights (June 2026)
+
+**New entities for schedule visibility and session history:**
+- 📅 **Charging Schedule Calendar** — shows all active charging windows as calendar events, with correct local timezone support
+- 📊 **Insights sensor** — tracks all charging sessions (start/stop times, energy delivered, RFID tag)
+- 🔄 **Refresh Charging Schedule button** — force-fetch the latest schedule immediately after changing it in Eve Connect
+- ⏱️ **Faster schedule refresh** — schedule profiles now auto-refresh every ~5 minutes (down from ~20 minutes)
+
 ### Wallbox Crash Prevention (January 2026)
 
 **Configurable category fetching to prevent wallbox crashes:**
@@ -171,6 +179,135 @@ service: alfen_wallbox.reboot_wallbox
 data:
   entity_id: alfen_wallbox.garage
 ```
+
+### - Add a charging profile (daily)
+
+Adds a charging window that repeats every day. Replace `sensor.wallbox_status_code_socket_1` with the actual entity ID of your wallbox.
+
+```yaml
+service: alfen_wallbox.add_charging_profile
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+  start_time: "09:00"
+  stop_time: "17:00"
+  max_current: 16
+  recurrency: DAILY
+```
+
+### - Add a charging profile (weekly, specific days)
+
+Adds a charging window that only runs on the specified days of the week.
+
+```yaml
+service: alfen_wallbox.add_charging_profile
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+  start_time: "22:00"
+  stop_time: "06:00"
+  max_current: 16
+  recurrency: WEEKLY
+  days:
+    - Monday
+    - Tuesday
+    - Wednesday
+    - Thursday
+    - Friday
+```
+
+### - Add a charging profile (all 7 days)
+
+To cover the full week, list all seven days:
+
+```yaml
+service: alfen_wallbox.add_charging_profile
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+  start_time: "09:15"
+  stop_time: "18:00"
+  max_current: 16
+  recurrency: WEEKLY
+  days:
+    - Monday
+    - Tuesday
+    - Wednesday
+    - Thursday
+    - Friday
+    - Saturday
+    - Sunday
+```
+
+### - Clear all charging profiles
+
+```yaml
+service: alfen_wallbox.clear_charging_profiles
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+```
+
+## Charging Schedule Calendar
+
+The integration creates a **Charging Schedule** calendar entity (`calendar.wallbox_charging_schedule`) that shows your configured charging windows as calendar events. Each event displays the charging power in kW and the current/phase details.
+
+The calendar refreshes automatically every ~5 minutes. After changing a schedule in Eve Connect, you can also press the **Refresh Charging Schedule** button to fetch the latest schedule immediately without waiting.
+
+### Weekly calendar card
+
+Add this to your Lovelace dashboard to see the full week at a glance:
+
+```yaml
+type: calendar
+entities:
+  - calendar.wallbox_charging_schedule
+initial_view: dayGridWeek
+title: Charging Schedule
+```
+
+For a day-by-day view instead:
+
+```yaml
+type: calendar
+entities:
+  - calendar.wallbox_charging_schedule
+initial_view: dayGridDay
+title: Charging Schedule
+```
+
+Available `initial_view` options:
+| Value | Description |
+|---|---|
+| `dayGridMonth` | Full month grid (default) |
+| `dayGridWeek` | 7-day week grid |
+| `dayGridDay` | Single day |
+| `listWeek` | Agenda list for the week |
+
+> **Tip:** Combine the calendar with other entities to see when your car was actually charging alongside the scheduled windows:
+> ```yaml
+> type: calendar
+> entities:
+>   - calendar.wallbox_charging_schedule
+> initial_view: dayGridWeek
+> ```
+
+## Insights (Charging Sessions)
+
+The **Insights** sensor (`sensor.wallbox_insights`) tracks all charging sessions stored on the wallbox. The sensor value shows the total number of sessions; the full list is available as a state attribute.
+
+Each session entry contains:
+
+| Field | Description |
+|---|---|
+| `id` | Unique transaction ID (hex) |
+| `socket` | Socket number |
+| `start_date` | Session start date and time |
+| `start_kwh` | Meter reading at start (kWh) |
+| `stop_date` | Session stop date and time |
+| `stop_kwh` | Meter reading at stop (kWh) |
+| `energy_kwh` | Energy delivered in this session (kWh) |
+| `tag` | RFID tag used to start the session |
+
+Sessions are sorted by most recent first, capped at the last 500 sessions.
+
+To enable the Insights sensor, add `transactions` to the **Refresh Categories** in the integration options. The data refreshes automatically every ~20 minutes; you can also press **Force Fetch Transaction** to update immediately.
 
 ## Development & Testing
 
