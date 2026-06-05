@@ -297,6 +297,9 @@
             },
             "charging_schedule": {
                 "name": "Charging schedule"
+            },
+            "solar_power": {
+                "name": "Puissance solaire"
             }
         },
         "binary_sensor": {
@@ -377,6 +380,9 @@
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Commutation de phase"
+            },
+            "lb_solar_charging_schedule": {
+                "name": "Planning charge solaire"
             },
             "dp_light_auto_dim": {
                 "name": "Gradation auto écran"

@@ -101,9 +101,9 @@ async def test_number_without_high_power_license(mock_entry, mock_coordinator):
     current_limit_desc = next(d for d in ALFEN_NUMBER_TYPES if d.api_param == "2129_0")
     entity = AlfenNumber(mock_entry, current_limit_desc)
 
-    # Max value should remain at default 16A
-    assert entity._attr_max_value == 16
-    assert entity._attr_native_max_value == 16
+    # Max value should remain at default 32A
+    assert entity._attr_max_value == 32
+    assert entity._attr_native_max_value == 32
 
 
 async def test_number_comfort_level_single_phase(mock_entry, mock_coordinator):

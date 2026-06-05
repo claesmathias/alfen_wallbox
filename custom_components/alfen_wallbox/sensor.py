@@ -1096,6 +1096,16 @@ ALFEN_SENSOR_TYPES: Final[tuple[AlfenSensorDescription, ...]] = (
         device_class=SensorDeviceClass.CURRENT,
     ),
     AlfenSensorDescription(
+        key="solar_power",
+        name="Solar Power",
+        icon="mdi:solar-power",
+        api_param="3276_2",
+        unit=UnitOfPower.WATT,
+        round_digits=None,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.POWER,
+    ),
+    AlfenSensorDescription(
         key="number_of_socket",
         name="Number of Sockets",
         icon="mdi:information-outline",

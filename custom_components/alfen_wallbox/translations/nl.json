@@ -297,6 +297,9 @@
             },
             "charging_schedule": {
                 "name": "Charging schedule"
+            },
+            "solar_power": {
+                "name": "Zonnestroom"
             }
         },
         "binary_sensor": {
@@ -377,6 +380,9 @@
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Fasewisseling"
+            },
+            "lb_solar_charging_schedule": {
+                "name": "Zonne laadschema"
             },
             "dp_light_auto_dim": {
                 "name": "Display auto dimmen"

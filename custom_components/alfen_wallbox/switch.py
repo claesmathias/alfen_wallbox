@@ -37,6 +37,11 @@ ALFEN_SWITCH_TYPES: Final[tuple[AlfenSwitchDescription, ...]] = (
         api_param="2061_1",
     ),
     AlfenSwitchDescription(
+        key="lb_solar_charging_schedule",
+        name="Solar Charging Schedule Enabled",
+        api_param="3280_1",
+    ),
+    AlfenSwitchDescription(
         key="lb_solar_charging_boost",
         name="Solar Charging Boost Socket 1",
         api_param="3280_4",

@@ -297,6 +297,9 @@
             },
             "charging_schedule": {
                 "name": "Charging schedule"
+            },
+            "solar_power": {
+                "name": "Solkraft"
             }
         },
         "binary_sensor": {
@@ -377,6 +380,9 @@
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Fasebytte"
+            },
+            "lb_solar_charging_schedule": {
+                "name": "Solladingsplan"
             },
             "dp_light_auto_dim": {
                 "name": "Skjerm auto-dim"

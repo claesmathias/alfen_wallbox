@@ -72,6 +72,9 @@
             },
             "charging_schedule": {
                 "default": "mdi:calendar-clock"
+            },
+            "solar_power": {
+                "default": "mdi:solar-power"
             }
         },
         "binary_sensor": {
@@ -152,6 +155,9 @@
         "switch": {
             "lb_enable_phase_switching": {
                 "default": "mdi:swap-horizontal"
+            },
+            "lb_solar_charging_schedule": {
+                "default": "mdi:calendar-sync"
             },
             "dp_light_auto_dim": {
                 "default": "mdi:brightness-auto"
