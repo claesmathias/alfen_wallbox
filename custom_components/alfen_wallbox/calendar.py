@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import datetime
 import logging
+from zoneinfo import ZoneInfo
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
@@ -81,6 +83,7 @@ def _profile_to_events(
     profile: dict,
     start_date: datetime.datetime,
     end_date: datetime.datetime,
+    tzinfo: datetime.tzinfo = datetime.UTC,
 ) -> list[CalendarEvent]:
     """Convert a single charging profile to CalendarEvents within the date range.
 
@@ -149,10 +152,10 @@ def _profile_to_events(
 
             if include:
                 event_start = datetime.datetime.combine(
-                    current, charge_start, tzinfo=datetime.UTC
+                    current, charge_start, tzinfo=tzinfo
                 )
                 event_end = datetime.datetime.combine(
-                    current, charge_end, tzinfo=datetime.UTC
+                    current, charge_end, tzinfo=tzinfo
                 )
 
                 if event_end <= event_start:
@@ -188,12 +191,13 @@ class AlfenChargingScheduleCalendar(AlfenEntity, CalendarEntity):
     @property
     def event(self) -> CalendarEvent | None:
         """Return the currently active charging event, or None."""
-        now = datetime.datetime.now(datetime.UTC)
-        today_start = datetime.datetime.combine(now.date(), datetime.time.min, tzinfo=datetime.UTC)
-        today_end = datetime.datetime.combine(now.date(), datetime.time.max, tzinfo=datetime.UTC)
+        now = dt_util.now()
+        tz = now.tzinfo or datetime.UTC
+        today_start = datetime.datetime.combine(now.date(), datetime.time.min, tzinfo=tz)
+        today_end = datetime.datetime.combine(now.date(), datetime.time.max, tzinfo=tz)
 
         for profile in self._profiles:
-            for evt in _profile_to_events(profile, today_start, today_end):
+            for evt in _profile_to_events(profile, today_start, today_end, tzinfo=tz):
                 if evt.start <= now < evt.end:
                     return evt
 
@@ -224,7 +228,8 @@ class AlfenChargingScheduleCalendar(AlfenEntity, CalendarEntity):
     ) -> list[CalendarEvent]:
         """Return calendar events in the requested date range."""
         await self._async_refresh_profiles()
+        tz: datetime.tzinfo = ZoneInfo(hass.config.time_zone)
         events: list[CalendarEvent] = []
         for profile in self._profiles:
-            events.extend(_profile_to_events(profile, start_date, end_date))
+            events.extend(_profile_to_events(profile, start_date, end_date, tzinfo=tz))
         return events

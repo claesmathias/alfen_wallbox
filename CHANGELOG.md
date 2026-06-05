@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.1] - 2026-06-05
+
+### Fixed
+
+- **Fixed charging calendar showing wrong times in non-UTC timezones** — calendar events were created with `tzinfo=UTC`, causing HA to shift the displayed times by the local UTC offset (e.g. +2 h for Europe/Brussels). Events are now created with the HA-configured local timezone (`hass.config.time_zone`) so 09:15–18:00 appears correctly instead of 11:15–20:00. The `event` property (current-event detection) is also fixed to use `dt_util.now()` with the local timezone.
+
 ## [3.5.0] - 2026-06-05
 
 ### Added
