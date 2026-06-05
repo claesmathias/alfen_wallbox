@@ -58,6 +58,8 @@ def mock_alfen_device_fixture():
         mock_device.clear_charging_profiles = AsyncMock()
         mock_device.set_boost_mode = AsyncMock()
         mock_device.stop_boost_mode = AsyncMock()
+        mock_device.pause_charging = AsyncMock()
+        mock_device.resume_charging = AsyncMock()
         mock_device.keep_logout = False
         mock_device.get_static_properties = False
         mock_device.category_options = ["generic", "states"]

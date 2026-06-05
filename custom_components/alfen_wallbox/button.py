@@ -19,6 +19,8 @@ from .const import (
     LOGOUT,
     METHOD_POST,
     PARAM_COMMAND,
+    PAUSE_CHARGING,
+    RESUME_CHARGING,
     STOP_BOOST_MODE,
 )
 from .coordinator import AlfenConfigEntry
@@ -103,6 +105,20 @@ ALFEN_BUTTON_TYPES: Final[tuple[AlfenButtonDescription, ...]] = (
         url_action=STOP_BOOST_MODE,
         json_data=None,
     ),
+    AlfenButtonDescription(
+        key="pause_charging",
+        name="Pause Charging",
+        method=METHOD_POST,
+        url_action=PAUSE_CHARGING,
+        json_data=None,
+    ),
+    AlfenButtonDescription(
+        key="resume_charging",
+        name="Resume Charging",
+        method=METHOD_POST,
+        url_action=RESUME_CHARGING,
+        json_data=None,
+    ),
 )
 
 
@@ -164,6 +180,14 @@ class AlfenButton(AlfenEntity, ButtonEntity):
 
         if self.entity_description.url_action == STOP_BOOST_MODE:
             await self.coordinator.device.stop_boost_mode()
+            return
+
+        if self.entity_description.url_action == PAUSE_CHARGING:
+            await self.coordinator.device.pause_charging()
+            return
+
+        if self.entity_description.url_action == RESUME_CHARGING:
+            await self.coordinator.device.resume_charging()
             return
 
         if self.entity_description.json_data is not None:

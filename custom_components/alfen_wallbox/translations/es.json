@@ -424,6 +424,12 @@
             },
             "stop_boost_mode": {
                 "name": "Stop boost mode"
+            },
+            "pause_charging": {
+                "name": "Pausar carga"
+            },
+            "resume_charging": {
+                "name": "Reanudar carga"
             }
         },
         "text": {

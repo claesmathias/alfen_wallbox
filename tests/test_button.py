@@ -27,8 +27,8 @@ async def test_button_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 9 button entities
-    assert len(entities) == 9
+    # Should create 11 button entities
+    assert len(entities) == 11
     assert entities[0].entity_description.key == "reboot_wallbox"
     assert entities[1].entity_description.key == "auth_logout"
     assert entities[2].entity_description.key == "auth_login"
@@ -38,6 +38,8 @@ async def test_button_setup(
     assert entities[6].entity_description.key == "clear_charging_profiles"
     assert entities[7].entity_description.key == "enable_boost_mode"
     assert entities[8].entity_description.key == "stop_boost_mode"
+    assert entities[9].entity_description.key == "pause_charging"
+    assert entities[10].entity_description.key == "resume_charging"
 
 
 async def test_button_initialization(
@@ -249,3 +251,49 @@ async def test_stop_boost_button_press(
     await button.async_press()
 
     mock_alfen_device.stop_boost_mode.assert_called_once()
+
+
+async def test_pause_charging_button_press(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_alfen_device,
+) -> None:
+    """Test pause charging button press."""
+    mock_config_entry.add_to_hass(hass)
+
+    from custom_components.alfen_wallbox.button import AlfenButton
+    from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
+
+    coordinator = AlfenCoordinator(hass, mock_config_entry)
+    coordinator.device = mock_alfen_device
+    mock_config_entry.runtime_data = coordinator
+
+    pause_desc = next(desc for desc in ALFEN_BUTTON_TYPES if desc.key == "pause_charging")
+    button = AlfenButton(mock_config_entry, pause_desc)
+
+    await button.async_press()
+
+    mock_alfen_device.pause_charging.assert_called_once()
+
+
+async def test_resume_charging_button_press(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_alfen_device,
+) -> None:
+    """Test resume charging button press."""
+    mock_config_entry.add_to_hass(hass)
+
+    from custom_components.alfen_wallbox.button import AlfenButton
+    from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
+
+    coordinator = AlfenCoordinator(hass, mock_config_entry)
+    coordinator.device = mock_alfen_device
+    mock_config_entry.runtime_data = coordinator
+
+    resume_desc = next(desc for desc in ALFEN_BUTTON_TYPES if desc.key == "resume_charging")
+    button = AlfenButton(mock_config_entry, resume_desc)
+
+    await button.async_press()
+
+    mock_alfen_device.resume_charging.assert_called_once()

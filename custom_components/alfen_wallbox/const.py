@@ -49,6 +49,8 @@ CHARGING_PROFILES = "chargingprofiles"
 CLEAR_CHARGING_PROFILES = "chargingprofiles?clear=all"
 BOOST_MODE = "Boost Mode"
 STOP_BOOST_MODE = "Stop Boost Mode"
+PAUSE_CHARGING = "Pause Charging"
+RESUME_CHARGING = "Resume Charging"
 
 CONF_REFRESH_CATEGORIES = "refresh_categories"
 

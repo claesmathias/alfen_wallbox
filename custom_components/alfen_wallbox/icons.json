@@ -199,6 +199,12 @@
             },
             "stop_boost_mode": {
                 "default": "mdi:lightning-bolt-off"
+            },
+            "pause_charging": {
+                "default": "mdi:pause-circle"
+            },
+            "resume_charging": {
+                "default": "mdi:play-circle"
             }
         },
         "text": {

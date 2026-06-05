@@ -424,6 +424,12 @@
             },
             "stop_boost_mode": {
                 "name": "Stop boost mode"
+            },
+            "pause_charging": {
+                "name": "Sæt opladning på pause"
+            },
+            "resume_charging": {
+                "name": "Genoptag opladning"
             }
         },
         "text": {

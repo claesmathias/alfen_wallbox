@@ -1169,6 +1169,34 @@ class AlfenDevice:
         )
         _LOGGER.debug("[%s] Stop Boost Mode response %s", self.log_id, str(response))
 
+    async def pause_charging(self) -> None:
+        """Pause charging by posting a zero-current profile at the highest stack level."""
+        profile = {
+            "chargingProfileId": -19930830,
+            "stackLevel": 2,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedule": {
+                "chargingRateUnit": "A",
+                "chargingSchedulePeriod": [
+                    {
+                        "startPeriod": 0,
+                        "limit": 0,
+                        "numberPhases": self.max_allowed_phases,
+                    }
+                ],
+            },
+        }
+        response = await self._post(cmd=f"{CHARGING_PROFILES}?add", payload=profile)
+        _LOGGER.debug("[%s] Pause Charging response %s", self.log_id, str(response))
+
+    async def resume_charging(self) -> None:
+        """Resume charging by removing the pause profile."""
+        response = await self._post(
+            cmd=f"{CHARGING_PROFILES}?clear=cpid=-19930830", payload=None
+        )
+        _LOGGER.debug("[%s] Resume Charging response %s", self.log_id, str(response))
+
     async def send_command(self, command: dict[str, Any]) -> None:
         """Run a command."""
         response = await self._post(cmd=CMD, payload=command)
