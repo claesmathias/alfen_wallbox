@@ -26,6 +26,7 @@ from .coordinator import AlfenConfigEntry, AlfenCoordinator, options_update_list
 PLATFORMS = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.CALENDAR,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,

@@ -126,6 +126,7 @@ async def test_platforms_loaded(
         expected_platforms = [
             Platform.BINARY_SENSOR,
             Platform.BUTTON,
+            Platform.CALENDAR,
             Platform.NUMBER,
             Platform.SELECT,
             Platform.SENSOR,

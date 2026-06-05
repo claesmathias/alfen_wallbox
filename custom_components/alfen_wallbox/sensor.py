@@ -1694,6 +1694,7 @@ async def async_setup_entry(
 
     async_add_entities(sensors)
     async_add_entities([AlfenMainSensor(entry, ALFEN_SENSOR_TYPES[0])])
+    async_add_entities([AlfenScheduleSensor(entry)])
 
     coordinator = entry.runtime_data
     if coordinator.device.get_number_of_sockets() == 2:
@@ -2316,3 +2317,76 @@ class AlfenSensor(AlfenEntity, SensorEntity):
     async def async_update(self):
         """Get the latest data and updates the states."""
         self._async_update_attrs()
+
+
+class AlfenScheduleSensor(AlfenEntity, SensorEntity):
+    """Sensor that exposes the number of active charging profiles and their details."""
+
+    _attr_icon = "mdi:calendar-clock"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialise the schedule sensor."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Schedule"
+        self._attr_unique_id = f"{device.id}-charging_schedule"
+        self._profiles: list[dict] = []
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of active charging profiles."""
+        return len(self._profiles)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return human-readable timeslot information."""
+        schedule = []
+        for profile in self._profiles:
+            recurrency = profile.get("recurrencyKind", "DAILY")
+            days = profile.get("daysOfWeek", [])
+            sched = profile.get("chargingSchedule", {})
+            periods = sched.get("chargingSchedulePeriod", [])
+            duration = sched.get("duration", 86400)
+
+            for idx, period in enumerate(periods):
+                limit = period.get("limit", 0)
+                if limit <= 0:
+                    continue
+
+                start_secs: int = period["startPeriod"]
+                number_phases: int = period.get("numberPhases", 1)
+
+                # Find end period
+                end_secs: int | None = None
+                for next_period in periods[idx + 1 :]:
+                    if next_period.get("limit", 0) == 0:
+                        end_secs = next_period["startPeriod"]
+                        break
+                if end_secs is None:
+                    end_secs = start_secs + duration
+
+                start_h, start_rem = divmod(int(start_secs), 3600)
+                start_m = start_rem // 60
+                end_h, end_rem = divmod(int(end_secs), 3600)
+                end_m = end_rem // 60
+
+                schedule.append(
+                    {
+                        "recurrency": recurrency,
+                        "days": days,
+                        "start": f"{start_h % 24:02d}:{start_m:02d}",
+                        "end": f"{end_h % 24:02d}:{end_m:02d}",
+                        "max_current_a": limit,
+                        "phases": number_phases,
+                    }
+                )
+
+        return {"schedule": schedule}
+
+    async def async_update(self) -> None:
+        """Fetch current charging profiles from the device."""
+        try:
+            self._profiles = await self.coordinator.device.get_charging_profiles()
+        except Exception:  # pylint: disable=broad-except
+            self._profiles = []
