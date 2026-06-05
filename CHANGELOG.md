@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.5] - 2026-06-05
+
+### Fixed
+
+- **Fixed concurrent login race condition causing rate-limit spam** — multiple coroutines (coordinator init, first update cycle) could simultaneously pass the rate-limit check before any recorded their attempt (TOCTOU race). Added `_login_lock` to serialize all login calls; a second coroutine waiting on the lock now skips the login entirely if the first already succeeded (`logged_in=True`)
+
 ## [3.5.4] - 2026-06-05
 
 ### Fixed

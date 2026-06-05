@@ -127,6 +127,7 @@ class AlfenDevice:
         self.latest_logs: deque[str] = deque(maxlen=500)
         # prevent multiple call to wallbox
         self._lock = asyncio.Lock()
+        self._login_lock = asyncio.Lock()
         self.update_values: dict[str, dict[str, Any]] = {}
         self._updating_lock = asyncio.Lock()
         self._update_values_lock = asyncio.Lock()
@@ -850,13 +851,23 @@ class AlfenDevice:
         """Login to the API."""
         self.keep_logout = False
 
-        # Check rate limiting before attempting login
-        if not self._check_login_rate_limit():
-            _LOGGER.warning("[%s] Login blocked by rate limiter", self.log_id)
-            return
+        async with self._login_lock:
+            # If another coroutine already logged in while we were waiting, skip.
+            if self.logged_in:
+                return
 
-        # Record this login attempt
-        self._record_login_attempt()
+            # Check rate limiting before attempting login
+            if not self._check_login_rate_limit():
+                _LOGGER.warning("[%s] Login blocked by rate limiter", self.log_id)
+                return
+
+            # Record this login attempt
+            self._record_login_attempt()
+
+            await self._do_login()
+
+    async def _do_login(self):
+        """Perform the actual login HTTP request. Must be called with _login_lock held."""
 
         # Check if session/connector needs recreation (e.g., after logout)
         if self._session.closed or (
