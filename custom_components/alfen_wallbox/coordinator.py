@@ -116,6 +116,7 @@ class AlfenCoordinator(DataUpdateCoordinator[None]):
             self.entry.options.get(CONF_CATEGORIES_PER_CYCLE, DEFAULT_CATEGORIES_PER_CYCLE),
             self.entry.options.get(CONF_CATEGORY_FETCH_DELAY, DEFAULT_CATEGORY_FETCH_DELAY),
         )
+        self.device.scan_interval = self.entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         # Set callback for session recreation after logout
         self.device._session_recreate_callback = lambda: self._recreate_session()
         if not await self.async_connect():
@@ -211,6 +212,7 @@ async def options_update_listener(self, entry: AlfenConfigEntry):
     coordinator.device.category_fetch_delay = entry.options.get(
         CONF_CATEGORY_FETCH_DELAY, DEFAULT_CATEGORY_FETCH_DELAY
     )
+    coordinator.device.scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
     coordinator.update_interval = timedelta(
         seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)

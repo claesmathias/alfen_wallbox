@@ -30,6 +30,7 @@ from .const import (
     CMD,
     COMMAND_CLEAR_TRANSACTIONS,
     COMMAND_REBOOT,
+    DEFAULT_SCAN_INTERVAL,
     DEFAULT_TIMEOUT,
     DOMAIN,
     ID,
@@ -104,6 +105,15 @@ class AlfenDevice:
         self.transaction_offset = 0
         self.transaction_counter = 0
         self.log_counter = 0
+        # Scan interval in seconds (kept in sync by coordinator via options_update_listener)
+        self.scan_interval: int = DEFAULT_SCAN_INTERVAL
+        # Cached charging profiles, refreshed every ~20 min regardless of scan interval
+        self.charging_profiles: list[dict] = []
+        self.schedule_counter = -1  # -1 triggers fetch on first cycle
+        # Full transaction history, keyed by (socket, tid) to prevent duplicates.
+        # Exposed as coordinator.device.transactions (list, most-recent first).
+        self._transaction_map: dict[tuple[str, int], dict] = {}
+        self.transactions: list[dict] = []
         self.category_rotation_index = 0
         self.ssl = ssl
         self.static_properties: list[dict[str, Any]] = []
@@ -449,22 +459,36 @@ class AlfenDevice:
         for prop in dynamic_properties:
             self.properties[str(prop[ID])] = prop
 
+    async def async_update_charging_profiles(self) -> None:
+        """Fetch and cache all user-defined charging profiles."""
+        try:
+            self.charging_profiles = await self.get_charging_profiles()
+        except Exception:
+            _LOGGER.debug("[%s] Failed to fetch charging profiles", self.log_id, exc_info=True)
+
     async def _fetch_logs_and_transactions(self) -> None:
         """Fetch logs and transactions according to their schedules."""
-        # Only fetch logs every 20th update cycle (reduces API load)
-        # With 30s scan interval, this means every ~10 minutes
+        # Compute cycle counts from scan_interval so refresh periods stay constant
+        # regardless of how fast or slow the update interval is configured.
+        log_cycles = max(1, round(420 / self.scan_interval))        # ~7 min
+        transaction_cycles = max(1, round(1200 / self.scan_interval))  # ~20 min
+        schedule_cycles = max(1, round(1200 / self.scan_interval))     # ~20 min
+
         if CAT_LOGS in self.category_options:
-            self.log_counter = (self.log_counter + 1) % 20
+            self.log_counter = (self.log_counter + 1) % log_cycles
             if self.log_counter == 0:
                 await self._get_log()
 
-        # Only fetch transactions every 60th update cycle (reduces API load)
-        # With 30s scan interval, this means every ~30 minutes
         if CAT_TRANSACTIONS in self.category_options:
-            self.transaction_counter = (self.transaction_counter + 1) % 60
+            self.transaction_counter = (self.transaction_counter + 1) % transaction_cycles
             if self.transaction_counter == 0 or self.force_update_transaction is True:
                 self.force_update_transaction = False
                 await self._get_transaction()
+
+        # schedule_counter starts at -1 so the first increment to 0 triggers fetch immediately
+        self.schedule_counter = (self.schedule_counter + 1) % schedule_cycles
+        if self.schedule_counter == 0:
+            await self.async_update_charging_profiles()
 
     async def async_update(self) -> bool:
         """Update the device properties.
@@ -1120,15 +1144,36 @@ class AlfenDevice:
         _LOGGER.debug("[%s] Clear Transactions response %s", self.log_id, str(response))
 
     async def get_charging_profiles(self) -> list[dict]:
-        """Get all charging profiles."""
-        response = await self._get(url=self.__get_url(f"{CHARGING_PROFILES}?cpid=-19930828"))
-        if response is None:
+        """Get all user-defined charging profiles.
+
+        Uses the ?id_list endpoint to discover all stored profile IDs, then
+        fetches each one and unwraps the API envelope.  Known system/internal
+        profile IDs are excluded so only user schedule profiles are returned.
+        """
+        id_list_response = await self._get(
+            url=self.__get_url(f"{CHARGING_PROFILES}?id_list")
+        )
+        if id_list_response is None:
             return []
-        if isinstance(response, list):
-            return response
-        if isinstance(response, dict):
-            return [response]
-        return []
+
+        all_ids: list[int] = id_list_response.get("ChargingProfileIDs", [])
+        # Skip the system grid-constraint profile and our internal boost/pause profiles
+        _SKIP_IDS = {-19930828, -19930829, -19930830}
+        user_ids = [cpid for cpid in all_ids if cpid not in _SKIP_IDS]
+
+        profiles: list[dict] = []
+        for cpid in user_ids:
+            response = await self._get(
+                url=self.__get_url(f"{CHARGING_PROFILES}?cpid={cpid}")
+            )
+            if response is None:
+                continue
+            inner = response.get("profile", {})
+            cs_profile = inner.get("csChargingProfiles") or inner
+            if cs_profile:
+                profiles.append(cs_profile)
+
+        return profiles
 
     async def add_charging_profile(self, schedule: dict[str, Any]) -> None:
         """Add a charging profile."""
@@ -1369,6 +1414,17 @@ class AlfenDevice:
                         self.latest_tag[socket, "start", "date"] = date
                         self.latest_tag[socket, "start", "kWh"] = kWh
 
+                        # Upsert into the transaction map keyed by (socket, hex_tx_id).
+                        # splitline[2] = "0x00000000087f6f16," — same ID appears in txstop.
+                        hex_tx_id = splitline[2].rstrip(",") if len(splitline) > 2 else tid_str
+                        rec = self._transaction_map.setdefault(
+                            (socket, hex_tx_id),
+                            {"id": hex_tx_id, "socket": socket},
+                        )
+                        rec["start_date"] = date
+                        rec["start_kwh"] = kWh
+                        rec["tag"] = tag
+
                     elif "txstop" in line:
                         # _LOGGER.debug("stop line: " + line)
 
@@ -1399,6 +1455,22 @@ class AlfenDevice:
                                     socket, "start", "date"
                                 ]
 
+                        # Find the matching txstart record via the shared hex transaction ID.
+                        hex_tx_id = splitline[2].rstrip(",") if len(splitline) > 2 else tid_str
+                        rec = self._transaction_map.setdefault(
+                            (socket, hex_tx_id),
+                            {"id": hex_tx_id, "socket": socket, "tag": tag},
+                        )
+                        rec["stop_date"] = date
+                        rec["stop_kwh"] = kWh
+                        # kWh values are cumulative meter readings; energy = stop − start
+                        try:
+                            rec["energy_kwh"] = round(
+                                float(kWh) - float(rec.get("start_kwh", kWh)), 3
+                            )
+                        except (ValueError, TypeError):
+                            pass
+
                     elif "mv" in line:
                         # _LOGGER.debug("mv line: " + line)
                         tid_str = splitline[0].split("_", 2)[0]
@@ -1414,15 +1486,18 @@ class AlfenDevice:
                         # _LOGGER.debug(self.latest_tag)
 
                     elif "dto" in line:
-                        # get the value from begin till _dto
-                        tid = int(splitline[0].split("_", 2)[0])
-                        if tid > offset:
-                            offset = tid
-                            # Cap offset to prevent unbounded growth
-                            offset = min(offset, maxOffset)
-                            continue
+                        # Format: "{line_id}_dto: {jump_target}"
+                        # The last token is the actual record offset to skip ahead to.
+                        # Bug was: code extracted the line_id (e.g. 0) instead of
+                        # jump_target (e.g. 1480240), causing a full ~1000-request scan.
+                        try:
+                            jump_target = int(splitline[-1])
+                            if jump_target > offset:
+                                offset = min(jump_target, maxOffset)
+                                continue
+                        except (ValueError, IndexError):
+                            pass
                         offset = offset + 1
-                        # Cap offset to prevent unbounded growth
                         offset = min(offset, maxOffset)
                         continue
                     elif "0_Empty" in line:
@@ -1462,6 +1537,13 @@ class AlfenDevice:
                 # check if last line is reached
                 if line == lines[-1]:
                     break
+
+        # Rebuild the sorted transaction list (most-recent first, capped at 500)
+        self.transactions = sorted(
+            self._transaction_map.values(),
+            key=lambda r: r.get("stop_date") or r.get("start_date") or "",
+            reverse=True,
+        )[:500]
 
     async def async_request(
         self, method: str, cmd: str, json_data: dict[str, Any] | None = None

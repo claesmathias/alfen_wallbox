@@ -953,3 +953,148 @@ async def test_stop_boost_mode_clears_boost_profile(alfen_device: AlfenDevice):
     cmd_arg = mock_post.call_args.kwargs.get("cmd") or mock_post.call_args.args[0]
     assert "chargingprofiles" in cmd_arg
     assert "-19930829" in cmd_arg
+
+
+# ---------------------------------------------------------------------------
+# get_charging_profiles
+# ---------------------------------------------------------------------------
+
+# A user-defined profile stored in the nested OCPP format (e.g. via add_charging_profile)
+SAMPLE_PROFILE = {
+    "chargingProfileId": 1001,
+    "stackLevel": 0,
+    "chargingProfilePurpose": "TxDefaultProfile",
+    "chargingProfileKind": "Recurring",
+    "recurrencyKind": "DAILY",
+    "chargingSchedule": {
+        "chargingRateUnit": "A",
+        "duration": 7200,
+        "chargingSchedulePeriod": [
+            {"startPeriod": 72000, "limit": 16, "numberPhases": 3},
+            {"startPeriod": 79200, "limit": 0, "numberPhases": 3},
+        ],
+    },
+}
+
+# Eve Connect flat-array profile (one per weekday, anchored on a reference date)
+EVE_CONNECT_PROFILE_MON = {
+    "chargingProfileId": 234202401,
+    "chargingProfileKind": "Recurring",
+    "recurrencyKind": "Weekly",
+    "chargingProfilePurpose": "ChargingStationExternalConstraints",
+    "startSchedule": "2024-04-01T00:00:00Z",
+    "stackLevel": 10,
+    "useLocalTime": True,
+    "chargingRateUnit": "A",
+    "startPeriod": [0, 1, 33300, 64800],
+    "limit": [0.0, 0.0, 15.9, 0.0],
+    "numberPhases": [1, 1, 3, 3],
+}
+
+# Wrapped in the API envelope as returned by ?cpid=234202401
+_EVE_WRAPPED = {"version": 2, "profile": {"csChargingProfiles": EVE_CONNECT_PROFILE_MON}}
+
+_ID_LIST_RESPONSE = {"ChargingProfileIDs": [234202401]}
+
+
+async def test_get_charging_profiles_returns_list(alfen_device: AlfenDevice):
+    """get_charging_profiles returns unwrapped profiles from the id_list flow."""
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(side_effect=[_ID_LIST_RESPONSE, _EVE_WRAPPED]),
+    ):
+        result = await alfen_device.get_charging_profiles()
+
+    assert result == [EVE_CONNECT_PROFILE_MON]
+
+
+async def test_get_charging_profiles_returns_empty_on_none(alfen_device: AlfenDevice):
+    """get_charging_profiles returns [] when id_list returns None."""
+    with patch.object(alfen_device, "_get", new=AsyncMock(return_value=None)):
+        result = await alfen_device.get_charging_profiles()
+
+    assert result == []
+
+
+async def test_get_charging_profiles_returns_empty_on_empty_id_list(alfen_device: AlfenDevice):
+    """get_charging_profiles returns [] when no user profiles are stored."""
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(return_value={"ChargingProfileIDs": [-19930828, -19930829]}),
+    ):
+        result = await alfen_device.get_charging_profiles()
+
+    # Both IDs are in the skip set — no further fetches, empty result
+    assert result == []
+
+
+async def test_get_charging_profiles_queries_id_list_first(alfen_device: AlfenDevice):
+    """get_charging_profiles first calls the ?id_list endpoint."""
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(return_value={"ChargingProfileIDs": []}),
+    ) as mock_get:
+        await alfen_device.get_charging_profiles()
+
+    first_url = mock_get.call_args_list[0].kwargs.get("url") or mock_get.call_args_list[0].args[0]
+    assert "chargingprofiles" in first_url
+    assert "id_list" in first_url
+
+
+async def test_get_charging_profiles_skips_system_ids(alfen_device: AlfenDevice):
+    """System profile IDs -19930828/-19930829/-19930830 are not fetched."""
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(
+            return_value={"ChargingProfileIDs": [-19930828, -19930829, -19930830]}
+        ),
+    ) as mock_get:
+        result = await alfen_device.get_charging_profiles()
+
+    # Only the id_list call should have been made — no individual cpid fetches
+    assert mock_get.call_count == 1
+    assert result == []
+
+
+async def test_get_charging_profiles_daily_timeslot(alfen_device: AlfenDevice):
+    """get_charging_profiles returns a nested-format DAILY profile correctly."""
+    wrapped = {"version": 2, "profile": {"csChargingProfiles": SAMPLE_PROFILE}}
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(side_effect=[{"ChargingProfileIDs": [1001]}, wrapped]),
+    ):
+        profiles = await alfen_device.get_charging_profiles()
+
+    assert len(profiles) == 1
+    profile = profiles[0]
+    assert profile["recurrencyKind"] == "DAILY"
+    periods = profile["chargingSchedule"]["chargingSchedulePeriod"]
+    assert periods[0]["startPeriod"] == 72000
+    assert periods[0]["limit"] == 16
+    assert periods[0]["numberPhases"] == 3
+    assert periods[1]["startPeriod"] == 79200
+    assert periods[1]["limit"] == 0
+
+
+async def test_get_charging_profiles_multiple_slots(alfen_device: AlfenDevice):
+    """get_charging_profiles fetches and returns multiple user profiles."""
+    second_eve = {**EVE_CONNECT_PROFILE_MON, "chargingProfileId": 234202402}
+    wrapped1 = {"version": 2, "profile": {"csChargingProfiles": EVE_CONNECT_PROFILE_MON}}
+    wrapped2 = {"version": 2, "profile": {"csChargingProfiles": second_eve}}
+    with patch.object(
+        alfen_device,
+        "_get",
+        new=AsyncMock(
+            side_effect=[{"ChargingProfileIDs": [234202401, 234202402]}, wrapped1, wrapped2]
+        ),
+    ):
+        profiles = await alfen_device.get_charging_profiles()
+
+    assert len(profiles) == 2
+    assert profiles[0]["chargingProfileId"] == 234202401
+    assert profiles[1]["chargingProfileId"] == 234202402

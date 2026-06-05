@@ -38,6 +38,7 @@ from .const import (
     SERVICE_REBOOT_WALLBOX,
     VALUE,
 )
+from .calendar import WEEKDAY_MAP, _normalize_periods, _seconds_to_time
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
 
@@ -1705,6 +1706,11 @@ async def async_setup_entry(
     async_add_entities(sensors)
     async_add_entities([AlfenMainSensor(entry, ALFEN_SENSOR_TYPES[0])])
     async_add_entities([AlfenScheduleSensor(entry)])
+    async_add_entities([
+        AlfenScheduleDaySensor(entry, day_name, weekday)
+        for day_name, weekday in _SCHEDULE_DAYS
+    ])
+    async_add_entities([AlfenTransactionsSensor(entry)])
 
     coordinator = entry.runtime_data
     if coordinator.device.get_number_of_sockets() == 2:
@@ -2329,74 +2335,148 @@ class AlfenSensor(AlfenEntity, SensorEntity):
         self._async_update_attrs()
 
 
+_SCHEDULE_DAYS: Final = [
+    ("Monday", 0),
+    ("Tuesday", 1),
+    ("Wednesday", 2),
+    ("Thursday", 3),
+    ("Friday", 4),
+    ("Saturday", 5),
+    ("Sunday", 6),
+]
+
+
+def _schedule_day_info(profiles: list[dict], weekday: int) -> dict | None:
+    """Return the first active charging window for *weekday* (0=Mon) or None."""
+    for profile in profiles:
+        start_schedule = profile.get("startSchedule")
+        if start_schedule:
+            try:
+                anchor = datetime.datetime.fromisoformat(
+                    start_schedule.replace("Z", "+00:00")
+                )
+                if anchor.weekday() != weekday:
+                    continue
+            except (ValueError, AttributeError):
+                continue
+        else:
+            recurrency = profile.get("recurrencyKind", "DAILY")
+            if recurrency in ("WEEKLY", "Weekly"):
+                days_of_week = profile.get("daysOfWeek", [])
+                if weekday not in {WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP}:
+                    continue
+
+        periods = _normalize_periods(profile)
+        for idx, (sp, limit, phases) in enumerate(periods):
+            if limit <= 0:
+                continue
+            end_sp: int | None = None
+            for next_sp, next_limit, _ in periods[idx + 1 :]:
+                if next_limit == 0:
+                    end_sp = next_sp
+                    break
+            if end_sp is None:
+                end_sp = sp + 86400
+            return {
+                "start": _seconds_to_time(sp).strftime("%H:%M"),
+                "end": _seconds_to_time(end_sp).strftime("%H:%M"),
+                "power_kw": round(limit * phases * 230 / 1000, 1),
+                "current_a": limit,
+                "phases": phases,
+            }
+    return None
+
+
 class AlfenScheduleSensor(AlfenEntity, SensorEntity):
-    """Sensor that exposes the number of active charging profiles and their details."""
+    """Reports the number of weekdays that have a charging schedule configured."""
 
     _attr_icon = "mdi:calendar-clock"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, entry: AlfenConfigEntry) -> None:
-        """Initialise the schedule sensor."""
         super().__init__(entry)
         device = self.coordinator.device
         self._attr_name = f"{device.name} Charging Schedule"
         self._attr_unique_id = f"{device.id}-charging_schedule"
-        self._profiles: list[dict] = []
 
     @property
     def native_value(self) -> int:
-        """Return the number of active charging profiles."""
-        return len(self._profiles)
+        """Return the number of weekdays that have at least one active charging window."""
+        profiles = self.coordinator.device.charging_profiles
+        return sum(
+            1
+            for _, wd in _SCHEDULE_DAYS
+            if _schedule_day_info(profiles, wd) is not None
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return human-readable timeslot information."""
-        schedule = []
-        for profile in self._profiles:
-            recurrency = profile.get("recurrencyKind", "DAILY")
-            days = profile.get("daysOfWeek", [])
-            sched = profile.get("chargingSchedule", {})
-            periods = sched.get("chargingSchedulePeriod", [])
-            duration = sched.get("duration", 86400)
-
-            for idx, period in enumerate(periods):
-                limit = period.get("limit", 0)
-                if limit <= 0:
-                    continue
-
-                start_secs: int = period["startPeriod"]
-                number_phases: int = period.get("numberPhases", 1)
-
-                # Find end period
-                end_secs: int | None = None
-                for next_period in periods[idx + 1 :]:
-                    if next_period.get("limit", 0) == 0:
-                        end_secs = next_period["startPeriod"]
-                        break
-                if end_secs is None:
-                    end_secs = start_secs + duration
-
-                start_h, start_rem = divmod(int(start_secs), 3600)
-                start_m = start_rem // 60
-                end_h, end_rem = divmod(int(end_secs), 3600)
-                end_m = end_rem // 60
-
-                schedule.append(
-                    {
-                        "recurrency": recurrency,
-                        "days": days,
-                        "start": f"{start_h % 24:02d}:{start_m:02d}",
-                        "end": f"{end_h % 24:02d}:{end_m:02d}",
-                        "max_current_a": limit,
-                        "phases": number_phases,
-                    }
-                )
-
+        """Return a per-day summary of all configured windows."""
+        profiles = self.coordinator.device.charging_profiles
+        schedule = {}
+        for day_name, wd in _SCHEDULE_DAYS:
+            info = _schedule_day_info(profiles, wd)
+            if info:
+                schedule[day_name.lower()] = info
         return {"schedule": schedule}
 
-    async def async_update(self) -> None:
-        """Fetch current charging profiles from the device."""
-        try:
-            self._profiles = await self.coordinator.device.get_charging_profiles()
-        except Exception:  # pylint: disable=broad-except
-            self._profiles = []
+
+class AlfenScheduleDaySensor(AlfenEntity, SensorEntity):
+    """Sensor showing the charging schedule window for a specific day of the week."""
+
+    _attr_icon = "mdi:calendar-today"
+
+    def __init__(self, entry: AlfenConfigEntry, day_name: str, weekday: int) -> None:
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._weekday = weekday
+        self._attr_name = f"{device.name} Schedule {day_name}"
+        self._attr_unique_id = f"{device.id}-schedule_{day_name.lower()}"
+
+    @property
+    def native_value(self) -> str:
+        """Return 'HH:MM–HH:MM' when a window is configured, else 'No schedule'."""
+        info = _schedule_day_info(self.coordinator.device.charging_profiles, self._weekday)
+        if info is None:
+            return "No schedule"
+        return f"{info['start']}–{info['end']}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        info = _schedule_day_info(self.coordinator.device.charging_profiles, self._weekday)
+        if info is None:
+            return {"scheduled": False}
+        return {
+            "scheduled": True,
+            "start": info["start"],
+            "end": info["end"],
+            "power_kw": info["power_kw"],
+            "current_a": info["current_a"],
+            "phases": info["phases"],
+        }
+
+
+class AlfenTransactionsSensor(AlfenEntity, SensorEntity):
+    """Sensor exposing the full Insights transaction history.
+
+    native_value  = number of recorded sessions (completed + in-progress)
+    extra_state_attributes.transactions = list of session dicts, most-recent first
+    """
+
+    _attr_icon = "mdi:lightning-bolt-circle"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "sessions"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Insights"
+        self._attr_unique_id = f"{device.id}-insights_transactions"
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.device.transactions)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"transactions": self.coordinator.device.transactions}

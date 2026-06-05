@@ -1,8 +1,9 @@
 """Support for Alfen Eve Proline binary sensors."""
 
 from dataclasses import dataclass
+import datetime
 import logging
-from typing import Final
+from typing import Any, Final
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -12,7 +13,9 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
+from .calendar import WEEKDAY_MAP, _normalize_periods, _seconds_to_time
 from .const import (
     CAT,
     LICENSE_HIGH_POWER,
@@ -133,6 +136,7 @@ async def async_setup_entry(
     ]
 
     async_add_entities(binaries)
+    async_add_entities([AlfenChargingWindowBinarySensor(entry)])
 
 
 class AlfenBinarySensor(AlfenEntity, BinarySensorEntity):
@@ -229,3 +233,74 @@ class AlfenBinarySensor(AlfenEntity, BinarySensorEntity):
             return {"last_updated": self.coordinator.device.last_updated}
 
         return None
+
+
+class AlfenChargingWindowBinarySensor(AlfenEntity, BinarySensorEntity):
+    """Binary sensor: On when the current time falls within a scheduled charging window."""
+
+    _attr_icon = "mdi:timer-play-outline"
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Window Active"
+        self._attr_unique_id = f"{device.id}-charging_window_active"
+
+    def _active_window(self) -> dict | None:
+        """Return the currently active charging window dict, or None."""
+        now = dt_util.now()
+        today_weekday = now.weekday()
+        seconds_now = now.hour * 3600 + now.minute * 60 + now.second
+
+        for profile in self.coordinator.device.charging_profiles:
+            start_schedule = profile.get("startSchedule")
+            if start_schedule:
+                try:
+                    anchor = datetime.datetime.fromisoformat(
+                        start_schedule.replace("Z", "+00:00")
+                    )
+                    if anchor.weekday() != today_weekday:
+                        continue
+                except (ValueError, AttributeError):
+                    continue
+            else:
+                recurrency = profile.get("recurrencyKind", "DAILY")
+                if recurrency in ("WEEKLY", "Weekly"):
+                    days_of_week = profile.get("daysOfWeek", [])
+                    if today_weekday not in {
+                        WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP
+                    }:
+                        continue
+
+            for idx, (sp, limit, phases) in enumerate(_normalize_periods(profile)):
+                if limit <= 0:
+                    continue
+                end_sp: int | None = None
+                for next_sp, next_limit, _ in _normalize_periods(profile)[idx + 1 :]:
+                    if next_limit == 0:
+                        end_sp = next_sp
+                        break
+                if end_sp is None:
+                    end_sp = sp + 86400
+
+                if sp <= seconds_now < end_sp:
+                    return {
+                        "start": _seconds_to_time(sp).strftime("%H:%M"),
+                        "end": _seconds_to_time(end_sp).strftime("%H:%M"),
+                        "power_kw": round(limit * phases * 230 / 1000, 1),
+                        "current_a": limit,
+                        "phases": phases,
+                    }
+        return None
+
+    @property
+    def is_on(self) -> bool:
+        return self._active_window() is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        window = self._active_window()
+        if window is None:
+            return None
+        return window

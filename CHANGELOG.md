@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.0] - 2026-06-05
+
+### Added
+
+#### Charging Schedule Sensors
+- **`{device} Charging Schedule`** — sensor reporting the number of weekdays that have a charging window configured
+- **`{device} Schedule Monday` … `Schedule Sunday`** — seven per-day sensors showing the active window (`HH:MM–HH:MM`) and attributes: `start`, `end`, `power_kw`, `current_a`, `phases`
+- **`{device} Charging Window Active`** — binary sensor (`running`) that turns ON while the current time falls inside a scheduled charging window; attributes expose `start`, `end`, `power_kw`, `current_a`, `phases` of the active window
+
+#### Insights Transaction Sensor
+- **`{device} Insights`** — sensor showing the total number of recorded charging sessions; `extra_state_attributes.transactions` contains the full list (most-recent first, max 500), each entry with `id`, `socket`, `start_date`, `start_kwh`, `stop_date`, `stop_kwh`, `energy_kwh`, `tag`
+
+### Fixed
+
+#### Eve Connect Profile Discovery
+- **Fixed charging profile discovery** — integration now calls `?id_list` to enumerate all stored profile IDs instead of querying a single hard-coded system profile ID; user-defined daily/weekly schedules configured via the Eve Connect app are now correctly detected
+- **Fixed calendar parsing for Eve Connect profiles** — added `_normalize_periods()` that handles both the standard nested OCPP `chargingSchedule.chargingSchedulePeriod` format and the Eve Connect flat-array format (`startPeriod: [...]`, `limit: [...]`, `numberPhases: [...]`)
+- **Fixed schedule summary format** — charging window labels now show power in kW (e.g. `Charging 11.0 kW`) instead of current in amps
+
+#### Transaction Fetch Performance (Critical)
+- **Fixed `dto` offset parsing bug** — `_get_transaction()` was extracting the line ID (`0`) instead of the jump target value (e.g. `1480240`) from `_dto` lines, causing a full scan of all historical records on every call (~1000 HTTP requests). Now correctly jumps to the latest records in 2–3 requests
+- **Fixed transaction start/stop pairing** — sessions are now keyed by the hex transaction ID embedded in each `txstart2`/`txstop2` line (e.g. `0x00000000087f6f16`) so start and stop events are reliably matched across different record offsets
+
+#### Dynamic Refresh Intervals
+- **Schedule/transaction/log refresh cycles now scale with scan interval** — previously hardcoded to 60 cycles; now computed as `max(1, round(target_seconds / scan_interval))` so the real-world refresh period stays constant (~20 min for transactions/schedule, ~7 min for logs) regardless of the configured scan interval
+
 ## [2.10.0] - 2026-01-09
 
 ### Fixed

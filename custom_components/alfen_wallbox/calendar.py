@@ -42,84 +42,119 @@ def _seconds_to_time(seconds: int) -> datetime.time:
     return datetime.time(hour=hours % 24, minute=minutes, second=secs)
 
 
+def _normalize_periods(profile: dict) -> list[tuple[int, float, int]]:
+    """Return ``(startPeriod_secs, limit_amps, numberPhases)`` tuples for all periods.
+
+    Handles two profile layouts used by Alfen wallboxes:
+
+    * **Nested** (standard OCPP / HA add_charging_profile service):
+      ``profile.chargingSchedule.chargingSchedulePeriod``
+    * **Flat-array** (Eve Connect / ChargingStationExternalConstraints):
+      parallel top-level lists ``startPeriod``, ``limit``, ``numberPhases``.
+    """
+    # Nested format
+    schedule = profile.get("chargingSchedule", {})
+    nested = schedule.get("chargingSchedulePeriod", [])
+    if nested:
+        return [
+            (int(p["startPeriod"]), float(p.get("limit", 0)), int(p.get("numberPhases", 1)))
+            for p in nested
+        ]
+
+    # Flat-array format
+    start_periods = profile.get("startPeriod", [])
+    if not start_periods:
+        return []
+    limits = profile.get("limit", [])
+    num_phases = profile.get("numberPhases", [])
+    return [
+        (int(sp), float(lim), int(np))
+        for sp, lim, np in zip(
+            start_periods,
+            limits if limits else [0.0] * len(start_periods),
+            num_phases if num_phases else [1] * len(start_periods),
+        )
+    ]
+
+
 def _profile_to_events(
     profile: dict,
     start_date: datetime.datetime,
     end_date: datetime.datetime,
 ) -> list[CalendarEvent]:
-    """Convert a single OCPP charging profile to a list of CalendarEvents.
+    """Convert a single charging profile to CalendarEvents within the date range.
 
-    A profile may contain multiple active periods (limit > 0).  For each
-    active period the end is defined by the next period where limit == 0
-    (or by start + schedule duration when no explicit off-period follows).
+    Supports:
 
-    Args:
-        profile: OCPP charging profile dict.
-        start_date: Inclusive lower bound of the requested calendar range.
-        end_date:   Inclusive upper bound of the requested calendar range.
-
-    Returns:
-        List of :class:`CalendarEvent` instances within the requested range.
+    * **DAILY** recurrence (no day filter)
+    * **WEEKLY** with ``daysOfWeek`` list (standard OCPP names)
+    * **Weekly** with ``startSchedule`` anchor date (Eve Connect format — one
+      profile per weekday, anchored on a reference week in April 2024)
     """
-    schedule = profile.get("chargingSchedule", {})
-    periods: list[dict] = schedule.get("chargingSchedulePeriod", [])
-    duration: int = schedule.get("duration", 86400)
+    periods = _normalize_periods(profile)
+    if not periods:
+        return []
+
     recurrency_kind: str = profile.get("recurrencyKind", "DAILY")
     days_of_week: list[str] = profile.get("daysOfWeek", [])
+    start_schedule: str | None = profile.get("startSchedule")
+
+    # Determine which weekday(s) this profile applies to.
+    # None means "every day" (DAILY).
+    target_weekdays: set[int] | None = None
+
+    if start_schedule and recurrency_kind in ("Weekly", "WEEKLY"):
+        # Eve Connect stores one profile per day, with startSchedule anchored
+        # on the concrete date of that weekday in a reference week.
+        try:
+            anchor = datetime.datetime.fromisoformat(
+                start_schedule.replace("Z", "+00:00")
+            )
+            target_weekdays = {anchor.weekday()}
+        except (ValueError, AttributeError):
+            pass
+    elif days_of_week:
+        target_weekdays = {WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP}
 
     events: list[CalendarEvent] = []
 
-    # Build charging windows: consecutive pairs of (on-period, off-period)
-    for idx, period in enumerate(periods):
-        limit = period.get("limit", 0)
+    for idx, (start_period, limit, num_phases) in enumerate(periods):
         if limit <= 0:
-            continue  # not an active charging period
+            continue
 
-        start_period: int = period["startPeriod"]
-        number_phases: int = period.get("numberPhases", 1)
-
-        # Find the end of this active window
+        # End of this active window = start of the next off-period
         end_period: int | None = None
-        for next_period in periods[idx + 1 :]:
-            if next_period.get("limit", 0) == 0:
-                end_period = next_period["startPeriod"]
+        for next_sp, next_limit, _ in periods[idx + 1 :]:
+            if next_limit == 0:
+                end_period = next_sp
                 break
-
         if end_period is None:
-            end_period = start_period + duration
+            end_period = start_period + 86400
 
-        charge_start_time = _seconds_to_time(start_period)
-        charge_end_time = _seconds_to_time(end_period)
+        charge_start = _seconds_to_time(start_period)
+        charge_end = _seconds_to_time(end_period)
 
-        start_str = charge_start_time.strftime("%H:%M")
-        end_str = charge_end_time.strftime("%H:%M")
+        power_kw = round(limit * num_phases * 230 / 1000, 1)
+        summary = f"Charging {power_kw} kW"
+        description = (
+            f"{charge_start.strftime('%H:%M')} – {charge_end.strftime('%H:%M')}"
+            f" | {limit}A × {num_phases} phase(s)"
+        )
 
-        summary = f"Charging {limit}A"
-        description = f"{start_str} – {end_str} | {number_phases} phase(s)"
-
-        # Iterate over each calendar day in the requested range
         current = start_date.date()
         end = end_date.date()
 
         while current <= end:
-            include_day = False
+            include = target_weekdays is None or current.weekday() in target_weekdays
 
-            if recurrency_kind == "DAILY":
-                include_day = True
-            elif recurrency_kind == "WEEKLY":
-                # days_of_week contains human-readable names, e.g. ["Monday", "Wednesday"]
-                weekday_numbers = [WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP]
-                include_day = current.weekday() in weekday_numbers
-
-            if include_day:
+            if include:
                 event_start = datetime.datetime.combine(
-                    current, charge_start_time, tzinfo=datetime.UTC
+                    current, charge_start, tzinfo=datetime.UTC
                 )
                 event_end = datetime.datetime.combine(
-                    current, charge_end_time, tzinfo=datetime.UTC
+                    current, charge_end, tzinfo=datetime.UTC
                 )
 
-                # Handle midnight wrap-around (end time before start time)
                 if event_end <= event_start:
                     event_end += datetime.timedelta(days=1)
 

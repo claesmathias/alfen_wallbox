@@ -74,6 +74,7 @@ def mock_coordinator_fixture():
     coordinator.device.info.firmware_version = "1.0.0"
     coordinator.device.get_charging_profiles = AsyncMock(return_value=[])
     coordinator.device.clear_charging_profiles = AsyncMock()
+    coordinator.device.charging_profiles = []
     return coordinator
 
 
@@ -129,14 +130,14 @@ def test_daily_profile_generates_event_for_each_day():
 
 
 def test_daily_profile_event_summary():
-    """Summary is 'Charging {limit}A'."""
+    """Summary is 'Charging {power} kW'."""
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
     end = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
 
     events = _profile_to_events(DAILY_PROFILE, start, end)
 
     assert len(events) == 1
-    assert events[0].summary == "Charging 16A"
+    assert events[0].summary == "Charging 11.0 kW"  # 16A × 3ph × 230V / 1000
 
 
 def test_daily_profile_event_start_end_times():
@@ -213,7 +214,7 @@ def test_weekly_profile_event_summary():
     events = _profile_to_events(WEEKLY_PROFILE, start, end)
 
     assert len(events) == 1
-    assert events[0].summary == "Charging 10A"
+    assert events[0].summary == "Charging 2.3 kW"  # 10A × 1ph × 230V / 1000
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +276,7 @@ def test_calendar_event_property_returns_active_event(calendar_entity):
     calendar_entity._profiles = [all_day_profile]
     evt = calendar_entity.event
     assert evt is not None
-    assert evt.summary == "Charging 16A"
+    assert evt.summary == "Charging 11.0 kW"
 
 
 def test_calendar_event_property_returns_none_outside_schedule(calendar_entity):
@@ -324,7 +325,7 @@ async def test_calendar_async_get_events_daily(
 
     assert len(events) == 7
     for evt in events:
-        assert evt.summary == "Charging 16A"
+        assert evt.summary == "Charging 11.0 kW"
 
 
 async def test_calendar_async_get_events_weekly(
@@ -445,21 +446,36 @@ async def test_calendar_setup_entry_adds_entity(
 # ---------------------------------------------------------------------------
 
 
-def test_schedule_sensor_native_value_zero_when_no_profiles(schedule_sensor):
-    """native_value is 0 when no profiles are loaded."""
-    schedule_sensor._profiles = []
+def test_schedule_sensor_native_value_zero_when_no_profiles(schedule_sensor, mock_coordinator):
+    """native_value is 0 when no profiles are cached."""
+    mock_coordinator.device.charging_profiles = []
     assert schedule_sensor.native_value == 0
 
 
-def test_schedule_sensor_native_value_counts_profiles(schedule_sensor):
-    """native_value equals the number of loaded profiles."""
-    schedule_sensor._profiles = [DAILY_PROFILE, WEEKLY_PROFILE]
+def test_schedule_sensor_native_value_weekly_two_days(schedule_sensor, mock_coordinator):
+    """WEEKLY profile with Mon+Wed → 2 scheduled days."""
+    mock_coordinator.device.charging_profiles = [WEEKLY_PROFILE]
     assert schedule_sensor.native_value == 2
 
 
-def test_schedule_sensor_native_value_single_profile(schedule_sensor):
-    """native_value is 1 for a single profile."""
-    schedule_sensor._profiles = [DAILY_PROFILE]
+def test_schedule_sensor_native_value_daily_covers_all_days(schedule_sensor, mock_coordinator):
+    """DAILY profile applies to all 7 days."""
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE]
+    assert schedule_sensor.native_value == 7
+
+
+def test_schedule_sensor_native_value_eve_connect_one_day(schedule_sensor, mock_coordinator):
+    """A single per-day Eve Connect profile (Monday anchor) counts as 1 scheduled day."""
+    eve_monday = {
+        "chargingProfileId": 234202401,
+        "chargingProfileKind": "Recurring",
+        "recurrencyKind": "Weekly",
+        "startSchedule": "2024-04-01T00:00:00Z",  # Monday
+        "startPeriod": [0, 33300, 64800],
+        "limit": [0.0, 15.9, 0.0],
+        "numberPhases": [1, 3, 3],
+    }
+    mock_coordinator.device.charging_profiles = [eve_monday]
     assert schedule_sensor.native_value == 1
 
 
@@ -468,55 +484,50 @@ def test_schedule_sensor_native_value_single_profile(schedule_sensor):
 # ---------------------------------------------------------------------------
 
 
-def test_schedule_sensor_extra_state_attributes_empty(schedule_sensor):
-    """extra_state_attributes contains an empty schedule list when no profiles."""
-    schedule_sensor._profiles = []
-    attrs = schedule_sensor.extra_state_attributes
-    assert attrs == {"schedule": []}
+def test_schedule_sensor_extra_state_attributes_empty(schedule_sensor, mock_coordinator):
+    """extra_state_attributes schedule dict is empty when no profiles cached."""
+    mock_coordinator.device.charging_profiles = []
+    assert schedule_sensor.extra_state_attributes == {"schedule": {}}
 
 
-def test_schedule_sensor_extra_state_attributes_daily(schedule_sensor):
-    """extra_state_attributes contains correct timeslot info for a DAILY profile."""
-    schedule_sensor._profiles = [DAILY_PROFILE]
-    attrs = schedule_sensor.extra_state_attributes
-    schedule = attrs["schedule"]
-
-    assert len(schedule) == 1
-    slot = schedule[0]
-    assert slot["recurrency"] == "DAILY"
-    assert slot["days"] == []
-    assert slot["start"] == "08:00"
-    assert slot["end"] == "10:00"
-    assert slot["max_current_a"] == 16
-    assert slot["phases"] == 3
-
-
-def test_schedule_sensor_extra_state_attributes_weekly(schedule_sensor):
-    """extra_state_attributes contains correct timeslot info for a WEEKLY profile."""
-    schedule_sensor._profiles = [WEEKLY_PROFILE]
+def test_schedule_sensor_extra_state_attributes_daily(schedule_sensor, mock_coordinator):
+    """DAILY profile produces entries for all 7 day names."""
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE]
     attrs = schedule_sensor.extra_state_attributes
     schedule = attrs["schedule"]
 
-    assert len(schedule) == 1
-    slot = schedule[0]
-    assert slot["recurrency"] == "WEEKLY"
-    assert slot["days"] == ["Monday", "Wednesday"]
-    assert slot["start"] == "09:00"
-    assert slot["end"] == "10:00"
-    assert slot["max_current_a"] == 10
-    assert slot["phases"] == 1
+    assert len(schedule) == 7
+    for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"):
+        assert day in schedule
+        assert schedule[day]["start"] == "08:00"
+        assert schedule[day]["end"] == "10:00"
+        assert schedule[day]["current_a"] == 16
+        assert schedule[day]["phases"] == 3
 
 
-def test_schedule_sensor_extra_state_attributes_multiple_profiles(schedule_sensor):
-    """extra_state_attributes aggregates timeslots from multiple profiles."""
-    schedule_sensor._profiles = [DAILY_PROFILE, WEEKLY_PROFILE]
+def test_schedule_sensor_extra_state_attributes_weekly(schedule_sensor, mock_coordinator):
+    """WEEKLY profile produces entries only for the matching days."""
+    mock_coordinator.device.charging_profiles = [WEEKLY_PROFILE]
     attrs = schedule_sensor.extra_state_attributes
-    assert len(attrs["schedule"]) == 2
+    schedule = attrs["schedule"]
+
+    assert set(schedule.keys()) == {"monday", "wednesday"}
+    assert schedule["monday"]["start"] == "09:00"
+    assert schedule["monday"]["end"] == "10:00"
+    assert schedule["monday"]["current_a"] == 10
+    assert schedule["monday"]["phases"] == 1
 
 
-def test_schedule_sensor_extra_state_attributes_ignores_zero_limit(schedule_sensor):
-    """extra_state_attributes skips periods where limit == 0."""
-    # Profile with only a zero-limit period
+def test_schedule_sensor_extra_state_attributes_multiple_profiles(schedule_sensor, mock_coordinator):
+    """DAILY and WEEKLY profiles combined — DAILY already covers all days."""
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE, WEEKLY_PROFILE]
+    attrs = schedule_sensor.extra_state_attributes
+    # DAILY covers all 7; WEEKLY covers Mon+Wed which are already in DAILY
+    assert len(attrs["schedule"]) == 7
+
+
+def test_schedule_sensor_extra_state_attributes_ignores_zero_limit(schedule_sensor, mock_coordinator):
+    """Profiles with no active period (all limit==0) produce no schedule entries."""
     off_profile = {
         "recurrencyKind": "DAILY",
         "chargingSchedule": {
@@ -526,40 +537,8 @@ def test_schedule_sensor_extra_state_attributes_ignores_zero_limit(schedule_sens
             ],
         },
     }
-    schedule_sensor._profiles = [off_profile]
-    attrs = schedule_sensor.extra_state_attributes
-    assert attrs["schedule"] == []
-
-
-# ---------------------------------------------------------------------------
-# AlfenScheduleSensor – async_update
-# ---------------------------------------------------------------------------
-
-
-async def test_schedule_sensor_async_update(
-    schedule_sensor: AlfenScheduleSensor,
-    mock_coordinator,
-) -> None:
-    """async_update fetches profiles from the device."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[DAILY_PROFILE])
-
-    await schedule_sensor.async_update()
-
-    assert schedule_sensor._profiles == [DAILY_PROFILE]
-    assert schedule_sensor.native_value == 1
-
-
-async def test_schedule_sensor_async_update_handles_exception(
-    schedule_sensor: AlfenScheduleSensor,
-    mock_coordinator,
-) -> None:
-    """async_update sets profiles to [] on exception."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(side_effect=RuntimeError("fail"))
-
-    await schedule_sensor.async_update()
-
-    assert schedule_sensor._profiles == []
-    assert schedule_sensor.native_value == 0
+    mock_coordinator.device.charging_profiles = [off_profile]
+    assert schedule_sensor.extra_state_attributes == {"schedule": {}}
 
 
 # ---------------------------------------------------------------------------

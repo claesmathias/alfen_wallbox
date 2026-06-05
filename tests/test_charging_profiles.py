@@ -84,25 +84,33 @@ def main_sensor_fixture(mock_coordinator):
 
 
 async def test_get_charging_profiles_returns_list(alfen_device: AlfenDevice):
-    """get_charging_profiles returns a list when the API gives a list."""
-    profiles = [{"chargingProfileId": 1}, {"chargingProfileId": 2}]
-    with patch.object(alfen_device, "_get", new=AsyncMock(return_value=profiles)):
+    """get_charging_profiles returns unwrapped profiles from the id_list flow."""
+    profile = {"chargingProfileId": 1}
+    id_list = {"ChargingProfileIDs": [1]}
+    wrapped = {"version": 2, "profile": {"csChargingProfiles": profile}}
+    with patch.object(
+        alfen_device, "_get", new=AsyncMock(side_effect=[id_list, wrapped])
+    ):
         result = await alfen_device.get_charging_profiles()
 
-    assert result == profiles
+    assert result == [profile]
 
 
 async def test_get_charging_profiles_wraps_dict_in_list(alfen_device: AlfenDevice):
-    """get_charging_profiles wraps a single dict response in a list."""
+    """get_charging_profiles fetches each profile ID and returns them as a list."""
     profile = {"chargingProfileId": 42}
-    with patch.object(alfen_device, "_get", new=AsyncMock(return_value=profile)):
+    id_list = {"ChargingProfileIDs": [42]}
+    wrapped = {"version": 2, "profile": {"csChargingProfiles": profile}}
+    with patch.object(
+        alfen_device, "_get", new=AsyncMock(side_effect=[id_list, wrapped])
+    ):
         result = await alfen_device.get_charging_profiles()
 
     assert result == [profile]
 
 
 async def test_get_charging_profiles_returns_empty_on_none(alfen_device: AlfenDevice):
-    """get_charging_profiles returns [] when the API returns None."""
+    """get_charging_profiles returns [] when the id_list API returns None."""
     with patch.object(alfen_device, "_get", new=AsyncMock(return_value=None)):
         result = await alfen_device.get_charging_profiles()
 
@@ -110,13 +118,15 @@ async def test_get_charging_profiles_returns_empty_on_none(alfen_device: AlfenDe
 
 
 async def test_get_charging_profiles_uses_correct_url(alfen_device: AlfenDevice):
-    """get_charging_profiles calls _get with the cpid query parameter."""
-    with patch.object(alfen_device, "_get", new=AsyncMock(return_value=[])) as mock_get:
+    """get_charging_profiles first calls the ?id_list endpoint."""
+    with patch.object(
+        alfen_device, "_get", new=AsyncMock(return_value={"ChargingProfileIDs": []})
+    ) as mock_get:
         await alfen_device.get_charging_profiles()
 
-    called_url = mock_get.call_args.kwargs["url"]
+    called_url = mock_get.call_args_list[0].kwargs["url"]
     assert "chargingprofiles" in called_url
-    assert "cpid=-19930828" in called_url
+    assert "id_list" in called_url
 
 
 # ---------------------------------------------------------------------------
