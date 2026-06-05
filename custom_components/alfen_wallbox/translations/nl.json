@@ -294,6 +294,9 @@
             },
             "last_modify_datetime": {
                 "name": "Laatste configuratiewijziging"
+            },
+            "charging_schedule": {
+                "name": "Charging schedule"
             }
         },
         "binary_sensor": {
@@ -406,6 +409,15 @@
             },
             "clear_transaction": {
                 "name": "Wis transacties"
+            },
+            "clear_charging_profiles": {
+                "name": "Clear charging schedule"
+            },
+            "enable_boost_mode": {
+                "name": "Enable boost mode"
+            },
+            "stop_boost_mode": {
+                "name": "Stop boost mode"
             }
         },
         "text": {

@@ -910,3 +910,46 @@ async def test_device_info_without_info(alfen_device: AlfenDevice):
 
     assert device_info["model"] == "Unknown"
     assert device_info["sw_version"] == "Unknown"
+
+
+async def test_set_boost_mode_posts_override_profile(alfen_device: AlfenDevice):
+    """set_boost_mode posts a TxDefaultProfile at stackLevel 1 with max current."""
+    alfen_device.max_allowed_phases = 3
+    with patch.object(alfen_device, "_post", new=AsyncMock(return_value={"success": True})) as mock_post:
+        await alfen_device.set_boost_mode()
+
+    mock_post.assert_called_once()
+    cmd_arg = mock_post.call_args.kwargs.get("cmd") or mock_post.call_args.args[0]
+    assert "chargingprofiles" in cmd_arg
+    assert "add" in cmd_arg
+
+    payload = mock_post.call_args.kwargs.get("payload") or mock_post.call_args.args[1]
+    assert payload["chargingProfilePurpose"] == "TxDefaultProfile"
+    assert payload["stackLevel"] == 1
+    assert payload["chargingProfileKind"] == "Absolute"
+    period = payload["chargingSchedule"]["chargingSchedulePeriod"][0]
+    assert period["limit"] == 3 * 32  # max_allowed_phases * 32
+    assert period["numberPhases"] == 3
+
+
+async def test_set_boost_mode_single_phase(alfen_device: AlfenDevice):
+    """set_boost_mode uses max_allowed_phases for single-phase setups."""
+    alfen_device.max_allowed_phases = 1
+    with patch.object(alfen_device, "_post", new=AsyncMock(return_value=None)) as mock_post:
+        await alfen_device.set_boost_mode()
+
+    payload = mock_post.call_args.kwargs.get("payload") or mock_post.call_args.args[1]
+    period = payload["chargingSchedule"]["chargingSchedulePeriod"][0]
+    assert period["limit"] == 32
+    assert period["numberPhases"] == 1
+
+
+async def test_stop_boost_mode_clears_boost_profile(alfen_device: AlfenDevice):
+    """stop_boost_mode calls clear endpoint with the boost profile cpid."""
+    with patch.object(alfen_device, "_post", new=AsyncMock(return_value={"success": True})) as mock_post:
+        await alfen_device.stop_boost_mode()
+
+    mock_post.assert_called_once()
+    cmd_arg = mock_post.call_args.kwargs.get("cmd") or mock_post.call_args.args[0]
+    assert "chargingprofiles" in cmd_arg
+    assert "-19930829" in cmd_arg

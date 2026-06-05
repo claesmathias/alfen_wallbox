@@ -1140,6 +1140,35 @@ class AlfenDevice:
         response = await self._post(cmd=f"{CHARGING_PROFILES}?clear=all", payload=None)
         _LOGGER.debug("[%s] Clear Charging Profiles response %s", self.log_id, str(response))
 
+    async def set_boost_mode(self) -> None:
+        """Apply a boost charging profile that overrides the schedule at max current."""
+        max_current = self.max_allowed_phases * 32
+        profile = {
+            "chargingProfileId": -19930829,
+            "stackLevel": 1,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedule": {
+                "chargingRateUnit": "A",
+                "chargingSchedulePeriod": [
+                    {
+                        "startPeriod": 0,
+                        "limit": max_current,
+                        "numberPhases": self.max_allowed_phases,
+                    }
+                ],
+            },
+        }
+        response = await self._post(cmd=f"{CHARGING_PROFILES}?add", payload=profile)
+        _LOGGER.debug("[%s] Set Boost Mode response %s", self.log_id, str(response))
+
+    async def stop_boost_mode(self) -> None:
+        """Remove the boost charging profile, returning to the scheduled charging."""
+        response = await self._post(
+            cmd=f"{CHARGING_PROFILES}?clear=cpid=-19930829", payload=None
+        )
+        _LOGGER.debug("[%s] Stop Boost Mode response %s", self.log_id, str(response))
+
     async def send_command(self, command: dict[str, Any]) -> None:
         """Run a command."""
         response = await self._post(cmd=CMD, payload=command)

@@ -69,6 +69,9 @@
             },
             "last_modify_datetime": {
                 "default": "mdi:calendar-edit"
+            },
+            "charging_schedule": {
+                "default": "mdi:calendar-clock"
             }
         },
         "binary_sensor": {
@@ -181,6 +184,15 @@
             },
             "clear_transaction": {
                 "default": "mdi:delete-sweep"
+            },
+            "clear_charging_profiles": {
+                "default": "mdi:calendar-remove"
+            },
+            "enable_boost_mode": {
+                "default": "mdi:lightning-bolt"
+            },
+            "stop_boost_mode": {
+                "default": "mdi:lightning-bolt-off"
             }
         },
         "text": {

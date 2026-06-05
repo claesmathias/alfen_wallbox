@@ -8,6 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    BOOST_MODE,
+    CLEAR_CHARGING_PROFILES,
     CMD,
     COMMAND_CLEAR_TRANSACTIONS,
     COMMAND_REBOOT,
@@ -17,6 +19,7 @@ from .const import (
     LOGOUT,
     METHOD_POST,
     PARAM_COMMAND,
+    STOP_BOOST_MODE,
 )
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
@@ -79,6 +82,27 @@ ALFEN_BUTTON_TYPES: Final[tuple[AlfenButtonDescription, ...]] = (
         url_action=FORCE_TRANSACTION_UPDATE,
         json_data=None,
     ),
+    AlfenButtonDescription(
+        key="clear_charging_profiles",
+        name="Clear Charging Schedule",
+        method=METHOD_POST,
+        url_action=CLEAR_CHARGING_PROFILES,
+        json_data=None,
+    ),
+    AlfenButtonDescription(
+        key="enable_boost_mode",
+        name="Enable Boost Mode",
+        method=METHOD_POST,
+        url_action=BOOST_MODE,
+        json_data=None,
+    ),
+    AlfenButtonDescription(
+        key="stop_boost_mode",
+        name="Stop Boost Mode",
+        method=METHOD_POST,
+        url_action=STOP_BOOST_MODE,
+        json_data=None,
+    ),
 )
 
 
@@ -128,6 +152,18 @@ class AlfenButton(AlfenEntity, ButtonEntity):
 
         if self.entity_description.url_action == LOGOUT:
             await self.coordinator.device.logout()
+            return
+
+        if self.entity_description.url_action == CLEAR_CHARGING_PROFILES:
+            await self.coordinator.device.clear_charging_profiles()
+            return
+
+        if self.entity_description.url_action == BOOST_MODE:
+            await self.coordinator.device.set_boost_mode()
+            return
+
+        if self.entity_description.url_action == STOP_BOOST_MODE:
+            await self.coordinator.device.stop_boost_mode()
             return
 
         if self.entity_description.json_data is not None:

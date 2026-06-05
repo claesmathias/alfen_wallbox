@@ -27,14 +27,17 @@ async def test_button_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 5 button entities
-    assert len(entities) == 6
+    # Should create 9 button entities
+    assert len(entities) == 9
     assert entities[0].entity_description.key == "reboot_wallbox"
     assert entities[1].entity_description.key == "auth_logout"
     assert entities[2].entity_description.key == "auth_login"
     assert entities[3].entity_description.key == "wallbox_force_update"
     assert entities[4].entity_description.key == "clear_transaction"
     assert entities[5].entity_description.key == "force_fetch_transaction"
+    assert entities[6].entity_description.key == "clear_charging_profiles"
+    assert entities[7].entity_description.key == "enable_boost_mode"
+    assert entities[8].entity_description.key == "stop_boost_mode"
 
 
 async def test_button_initialization(
@@ -200,3 +203,49 @@ async def test_clear_transaction_button_press(
     call_args = mock_alfen_device.send_command.call_args[0][0]
     assert "command" in call_args
     assert call_args["command"] == "txerase"
+
+
+async def test_enable_boost_button_press(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_alfen_device,
+) -> None:
+    """Test enable boost mode button press."""
+    mock_config_entry.add_to_hass(hass)
+
+    from custom_components.alfen_wallbox.button import AlfenButton
+    from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
+
+    coordinator = AlfenCoordinator(hass, mock_config_entry)
+    coordinator.device = mock_alfen_device
+    mock_config_entry.runtime_data = coordinator
+
+    boost_desc = next(desc for desc in ALFEN_BUTTON_TYPES if desc.key == "enable_boost_mode")
+    button = AlfenButton(mock_config_entry, boost_desc)
+
+    await button.async_press()
+
+    mock_alfen_device.set_boost_mode.assert_called_once()
+
+
+async def test_stop_boost_button_press(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_alfen_device,
+) -> None:
+    """Test stop boost mode button press."""
+    mock_config_entry.add_to_hass(hass)
+
+    from custom_components.alfen_wallbox.button import AlfenButton
+    from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
+
+    coordinator = AlfenCoordinator(hass, mock_config_entry)
+    coordinator.device = mock_alfen_device
+    mock_config_entry.runtime_data = coordinator
+
+    stop_boost_desc = next(desc for desc in ALFEN_BUTTON_TYPES if desc.key == "stop_boost_mode")
+    button = AlfenButton(mock_config_entry, stop_boost_desc)
+
+    await button.async_press()
+
+    mock_alfen_device.stop_boost_mode.assert_called_once()

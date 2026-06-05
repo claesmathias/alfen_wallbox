@@ -54,6 +54,10 @@ def mock_alfen_device_fixture():
         mock_device.log_id = "Test Wallbox@192.168.1.100"
         mock_device.get_licenses = MagicMock(return_value=[])
         mock_device.get_number_of_sockets = MagicMock(return_value=1)
+        mock_device.send_command = AsyncMock()
+        mock_device.clear_charging_profiles = AsyncMock()
+        mock_device.set_boost_mode = AsyncMock()
+        mock_device.stop_boost_mode = AsyncMock()
         mock_device.keep_logout = False
         mock_device.get_static_properties = False
         mock_device.category_options = ["generic", "states"]

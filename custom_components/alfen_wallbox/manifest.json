@@ -3,11 +3,11 @@
     "name": "Alfen Wallbox",
     "codeowners": ["@leeyuentuen"],
     "config_flow": true,
-    "dependencies": [],
+    "dependencies": ["calendar"],
     "documentation": "https://github.com/leeyuentuen/alfen_wallbox",
     "integration_type": "hub",
     "iot_class": "local_polling",
     "issue_tracker": "https://github.com/leeyuentuen/alfen_wallbox/issues",
     "requirements": [],
-    "version": "3.1.0"
+    "version": "3.2.0"
 }

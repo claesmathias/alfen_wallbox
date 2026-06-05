@@ -46,6 +46,9 @@ COMMAND_REBOOT = "reboot"
 COMMAND_CLEAR_TRANSACTIONS = "txerase"
 
 CHARGING_PROFILES = "chargingprofiles"
+CLEAR_CHARGING_PROFILES = "chargingprofiles?clear=all"
+BOOST_MODE = "Boost Mode"
+STOP_BOOST_MODE = "Stop Boost Mode"
 
 CONF_REFRESH_CATEGORIES = "refresh_categories"
 
