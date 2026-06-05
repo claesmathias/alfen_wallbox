@@ -312,9 +312,10 @@ def test_calendar_event_property_returns_none_outside_schedule(calendar_entity):
 async def test_calendar_async_get_events_daily(
     hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
+    mock_coordinator,
 ) -> None:
     """async_get_events returns one event per day for a DAILY profile."""
-    calendar_entity._profiles = [DAILY_PROFILE]
+    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[DAILY_PROFILE])
 
     start = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
     end = datetime.datetime(2024, 6, 7, tzinfo=datetime.UTC)
@@ -329,9 +330,10 @@ async def test_calendar_async_get_events_daily(
 async def test_calendar_async_get_events_weekly(
     hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
+    mock_coordinator,
 ) -> None:
     """async_get_events returns events only on matching weekdays for WEEKLY profile."""
-    calendar_entity._profiles = [WEEKLY_PROFILE]
+    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[WEEKLY_PROFILE])
 
     # Week of 2024-01-01 (Mon) – 2024-01-07 (Sun)
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
@@ -346,9 +348,10 @@ async def test_calendar_async_get_events_weekly(
 async def test_calendar_async_get_events_empty_when_no_profiles(
     hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
+    mock_coordinator,
 ) -> None:
     """async_get_events returns empty list when there are no profiles."""
-    calendar_entity._profiles = []
+    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[])
 
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
     end = datetime.datetime(2024, 1, 7, tzinfo=datetime.UTC)
@@ -361,9 +364,12 @@ async def test_calendar_async_get_events_empty_when_no_profiles(
 async def test_calendar_async_get_events_multiple_profiles(
     hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
+    mock_coordinator,
 ) -> None:
     """async_get_events aggregates events from all profiles."""
-    calendar_entity._profiles = [DAILY_PROFILE, WEEKLY_PROFILE]
+    mock_coordinator.device.get_charging_profiles = AsyncMock(
+        return_value=[DAILY_PROFILE, WEEKLY_PROFILE]
+    )
 
     # Single Monday
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)  # Monday
@@ -376,7 +382,7 @@ async def test_calendar_async_get_events_multiple_profiles(
 
 
 # ---------------------------------------------------------------------------
-# CalendarEntity – async_update
+# CalendarEntity – _async_refresh_profiles
 # ---------------------------------------------------------------------------
 
 
@@ -384,10 +390,10 @@ async def test_calendar_async_update_fetches_profiles(
     calendar_entity: AlfenChargingScheduleCalendar,
     mock_coordinator,
 ) -> None:
-    """async_update populates _profiles from the device."""
+    """_async_refresh_profiles populates _profiles from the device."""
     mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[DAILY_PROFILE])
 
-    await calendar_entity.async_update()
+    await calendar_entity._async_refresh_profiles()
 
     assert calendar_entity._profiles == [DAILY_PROFILE]
 
@@ -396,10 +402,10 @@ async def test_calendar_async_update_handles_exception(
     calendar_entity: AlfenChargingScheduleCalendar,
     mock_coordinator,
 ) -> None:
-    """async_update resets profiles to [] on exception."""
+    """_async_refresh_profiles resets profiles to [] on exception."""
     mock_coordinator.device.get_charging_profiles = AsyncMock(side_effect=Exception("API down"))
 
-    await calendar_entity.async_update()
+    await calendar_entity._async_refresh_profiles()
 
     assert calendar_entity._profiles == []
 

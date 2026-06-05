@@ -164,19 +164,12 @@ class AlfenChargingScheduleCalendar(AlfenEntity, CalendarEntity):
 
         return None
 
-    async def async_get_events(
-        self,
-        hass: HomeAssistant,
-        start_date: datetime.datetime,
-        end_date: datetime.datetime,
-    ) -> list[CalendarEvent]:
-        """Return calendar events in the requested date range."""
-        events: list[CalendarEvent] = []
-        for profile in self._profiles:
-            events.extend(_profile_to_events(profile, start_date, end_date))
-        return events
+    async def async_added_to_hass(self) -> None:
+        """Fetch profiles once on startup so the `event` property is populated."""
+        await super().async_added_to_hass()
+        await self._async_refresh_profiles()
 
-    async def async_update(self) -> None:
+    async def _async_refresh_profiles(self) -> None:
         """Fetch current charging profiles from the device."""
         try:
             self._profiles = await self.coordinator.device.get_charging_profiles()
@@ -187,3 +180,16 @@ class AlfenChargingScheduleCalendar(AlfenEntity, CalendarEntity):
                 exc_info=True,
             )
             self._profiles = []
+
+    async def async_get_events(
+        self,
+        hass: HomeAssistant,
+        start_date: datetime.datetime,
+        end_date: datetime.datetime,
+    ) -> list[CalendarEvent]:
+        """Return calendar events in the requested date range."""
+        await self._async_refresh_profiles()
+        events: list[CalendarEvent] = []
+        for profile in self._profiles:
+            events.extend(_profile_to_events(profile, start_date, end_date))
+        return events
