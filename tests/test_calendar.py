@@ -5,20 +5,19 @@ from __future__ import annotations
 import datetime
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from homeassistant.core import HomeAssistant
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.alfen_wallbox.button import ALFEN_BUTTON_TYPES, AlfenButton
 from custom_components.alfen_wallbox.calendar import (
     AlfenChargingScheduleCalendar,
     _profile_to_events,
     _seconds_to_time,
     async_setup_entry,
 )
-from custom_components.alfen_wallbox.sensor import AlfenScheduleSensor
-from custom_components.alfen_wallbox.button import ALFEN_BUTTON_TYPES, AlfenButton
 from custom_components.alfen_wallbox.const import CLEAR_CHARGING_SCHEDULE
-
+from custom_components.alfen_wallbox.sensor import AlfenScheduleSensor
 
 # ---------------------------------------------------------------------------
 # Sample OCPP profiles for reuse across tests

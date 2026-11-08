@@ -6,8 +6,7 @@ import pytest
 
 from custom_components.alfen_wallbox.alfen import AlfenDevice
 from custom_components.alfen_wallbox.const import DOMAIN, ID, VALUE
-from custom_components.alfen_wallbox.sensor import AlfenMainSensor, ALFEN_SENSOR_TYPES
-
+from custom_components.alfen_wallbox.sensor import ALFEN_SENSOR_TYPES, AlfenMainSensor
 
 # ---------------------------------------------------------------------------
 # Fixtures

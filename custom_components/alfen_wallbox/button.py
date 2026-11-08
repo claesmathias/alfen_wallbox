@@ -226,11 +226,11 @@ async def _export_history(coordinator: AlfenCoordinator) -> None:
     The links are signed for the user who pressed the button and expire after
     an hour. They are also exposed on the Insights sensor for automations.
     """
-    links = async_create_export_links(coordinator.hass, coordinator.config_entry.entry_id)
+    links = async_create_export_links(coordinator.hass, coordinator.entry.entry_id)
     coordinator.export_links = links
     coordinator.async_update_listeners()
     sessions = len(coordinator.device.transactions)
-    expires = dt_util.parse_datetime(links["expires"])
+    expires = dt_util.parse_datetime(links["expires"]) or dt_util.now()
     persistent_notification.async_create(
         coordinator.hass,
         (
@@ -240,7 +240,7 @@ async def _export_history(coordinator: AlfenCoordinator) -> None:
             f"The links work until {dt_util.as_local(expires):%H:%M}."
         ),
         title=f"{coordinator.device.name}: charging history export",
-        notification_id=f"alfen_wallbox_export_{coordinator.config_entry.entry_id}",
+        notification_id=f"alfen_wallbox_export_{coordinator.entry.entry_id}",
     )
 
 

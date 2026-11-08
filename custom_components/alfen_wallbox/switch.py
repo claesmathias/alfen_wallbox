@@ -123,6 +123,7 @@ async def async_setup_entry(
         AlfenSwitchSensor(entry, description) for description in ALFEN_SWITCH_TYPES
     ]
     switches.append(AlfenChargingScheduleSwitch(entry))
+    switches.append(AlfenChargingSwitch(entry))
 
     async_add_entities(switches)
 
@@ -239,3 +240,36 @@ class AlfenChargingScheduleSwitch(AlfenEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Charge at any time again."""
         await self.coordinator.device.set_schedule_enabled(False)
+
+
+class AlfenChargingSwitch(AlfenEntity, SwitchEntity):
+    """Pause (off) and resume (on) charging.
+
+    Same entity as upstream's "Charging" switch, but it uses the Eve Connect pause
+    profile instead of setting the station maximum current (2062_0) to 0: the
+    installer setting stays untouched, nothing has to be remembered across
+    restarts, and a pause from the app is shown here too (and vice versa).
+    """
+
+    _attr_icon = "mdi:ev-station"
+    _attr_translation_key = "charging"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging"
+        self._attr_unique_id = f"{device.id}_charging"
+
+    @property
+    def is_on(self) -> bool:
+        """Return True unless charging is paused."""
+        return not self.coordinator.device.pause_active
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Resume charging."""
+        await self.coordinator.device.resume_charging()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Pause charging."""
+        await self.coordinator.device.pause_charging()

@@ -194,15 +194,58 @@ async def test_async_update_retries_failed_updates(alfen_device: AlfenDevice):
     # Queue an update
     await alfen_device.set_value("2129_0", 16)
 
-    # Mock failed update
+    # Mock a temporary failure (None): the value stays queued
     with (
-        patch.object(alfen_device, "_update_value", new=AsyncMock(return_value=False)),
+        patch.object(alfen_device, "_update_value", new=AsyncMock(return_value=None)),
         patch.object(alfen_device, "_get_all_properties_value", new=AsyncMock(return_value=[])),
     ):
         result = await alfen_device.async_update()
 
         assert result is True
         assert "2129_0" in alfen_device.update_values  # Should remain for retry
+
+
+async def test_async_update_drops_rejected_values(alfen_device: AlfenDevice):
+    """A value the wallbox rejects permanently (False) is dropped, not retried forever."""
+    await alfen_device.set_value("212A_0", 10)
+    with (
+        patch.object(alfen_device, "_update_value", new=AsyncMock(return_value=False)),
+        patch.object(alfen_device, "_get_all_properties_value", new=AsyncMock(return_value=[])),
+    ):
+        assert await alfen_device.async_update() is True
+    assert "212A_0" not in alfen_device.update_values
+
+
+async def test_update_value_rejected_status_returns_false(alfen_device: AlfenDevice, mock_session):
+    """HTTP 403 from the wallbox means 'rejected': no retry, no re-login."""
+    response = MagicMock()
+    response.status = 403
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=None)
+    mock_session.post = MagicMock(return_value=response)
+    alfen_device.logged_in = True
+    assert await alfen_device._update_value("212A_0", 10) is False
+
+
+async def test_failed_login_backs_off(alfen_device: AlfenDevice, mock_session):
+    """After a failed login, further attempts wait instead of hammering the wallbox."""
+    mock_session.post = MagicMock(side_effect=OSError("unreachable"))
+    await alfen_device.login()
+    assert alfen_device.logged_in is False
+    assert mock_session.post.call_count == 1
+    await alfen_device.login()  # within the backoff window: no new request
+    assert mock_session.post.call_count == 1
+
+
+async def test_jwt_token_from_login_is_sent(alfen_device: AlfenDevice):
+    """Firmware with token auth: the access token from login is sent as Bearer."""
+    alfen_device._access_token = "abc.def.ghi"
+    assert alfen_device._auth_headers({"Content-Type": "application/json"}) == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer abc.def.ghi",
+    }
+    alfen_device._access_token = None
+    assert alfen_device._auth_headers() == {}
 
 
 async def test_auto_login_on_401_get(alfen_device: AlfenDevice, mock_session):

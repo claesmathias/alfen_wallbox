@@ -17,12 +17,13 @@ from __future__ import annotations
 import datetime
 from zoneinfo import ZoneInfo
 
-from homeassistant.components.calendar import CalendarEntity, CalendarEntityFeature, CalendarEvent
+from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.components.calendar.const import (
     EVENT_END,
     EVENT_RRULE,
     EVENT_START,
     EVENT_SUMMARY,
+    CalendarEntityFeature,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError

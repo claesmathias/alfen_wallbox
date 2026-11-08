@@ -498,7 +498,29 @@ async def test_entity_unique_ids_are_unique():
     for name in ("binary_sensor", "button", "calendar", "number", "select", "sensor", "switch", "text", "time"):
         module = importlib.import_module(f"custom_components.alfen_wallbox.{name}")
         created: list = []
-        await module.async_setup_entry(MagicMock(), entry, lambda ents, *_: created.extend(ents))
+        await module.async_setup_entry(MagicMock(), entry, lambda ents, *_, sink=created: sink.extend(ents))
         ids = [entity.unique_id for entity in created]
         duplicates = sorted({uid for uid in ids if ids.count(uid) > 1})
         assert not duplicates, f"{name}: duplicate unique IDs {duplicates}"
+
+
+async def test_history_fetch_has_its_own_budget(device):
+    """A slow history fetch is cut off without failing the update, and retried next cycle."""
+    import asyncio
+
+    from custom_components.alfen_wallbox import alfen as alfen_module
+
+    device.category_options = ["transactions"]
+
+    async def slow_fetch(*args, **kwargs):
+        await asyncio.sleep(10)
+        return False
+
+    with (
+        patch.object(alfen_module, "HISTORY_FETCH_TIMEOUT", 0.05),
+        patch.object(device, "_get_transaction", new=AsyncMock(side_effect=slow_fetch)),
+        patch.object(device, "async_update_charging_profiles", new=AsyncMock()),
+    ):
+        await device._fetch_logs_and_transactions()  # first cycle fetches immediately
+    assert device.history_fetch_retries == 1
+    assert device.transaction_counter == -1  # retried on the next cycle

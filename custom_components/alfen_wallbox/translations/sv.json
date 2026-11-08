@@ -478,6 +478,9 @@
             },
             "charging_schedule_enabled": {
                 "name": "Laddschema"
+            },
+            "charging": {
+                "name": "Laddning"
             }
         },
         "button": {

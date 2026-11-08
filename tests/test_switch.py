@@ -30,11 +30,12 @@ async def test_switch_setup(
     # 13 property switches + the "Charging Schedule" (apply schedule) switch.
     # The 3280_1 "Solar Charging Schedule Enabled" switch was removed in 3.6.0:
     # 3280_1 is the 3-way solar mode, exposed by the Solar Charging Mode select.
-    assert len(entities) == 14
+    assert len(entities) == 15
     assert entities[0].entity_description.key == "lb_enable_phase_switching"
-    keys = [e.entity_description.key for e in entities[:-1]]
+    keys = [e.entity_description.key for e in entities[:-2]]
     assert "lb_solar_charging_schedule" not in keys
-    assert entities[-1].unique_id.endswith("_charging_schedule_enabled")
+    assert entities[-2].unique_id.endswith("_charging_schedule_enabled")
+    assert entities[-1].unique_id.endswith("_charging")  # same ID as upstream's switch
 
 
 async def test_switch_initialization(
@@ -273,3 +274,27 @@ async def test_switch_disable_phase_switching(
     # set_value should be called (from async_turn_off)
     mock_alfen_device.set_value.assert_called_once()
     # async_update is NOT called - set_value() triggers coordinator refresh via callback
+
+
+async def test_charging_switch_pauses_and_resumes(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry, mock_alfen_device
+) -> None:
+    """The Charging switch uses the Eve Connect pause profile, not 2062_0 = 0."""
+    from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
+    from custom_components.alfen_wallbox.switch import AlfenChargingSwitch
+
+    mock_config_entry.add_to_hass(hass)
+    coordinator = AlfenCoordinator(hass, mock_config_entry)
+    coordinator.device = mock_alfen_device
+    mock_config_entry.runtime_data = coordinator
+    switch = AlfenChargingSwitch(mock_config_entry)
+
+    mock_alfen_device.pause_active = False
+    assert switch.is_on is True
+    await switch.async_turn_off()
+    mock_alfen_device.pause_charging.assert_awaited_once()
+    mock_alfen_device.pause_active = True
+    assert switch.is_on is False
+    await switch.async_turn_on()
+    mock_alfen_device.resume_charging.assert_awaited_once()
+    mock_alfen_device.set_value.assert_not_called()

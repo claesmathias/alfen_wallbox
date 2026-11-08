@@ -200,3 +200,4 @@ async def test_coordinator_setup_creates_device(
         # Verify device was created with correct parameters
         mock_device_class.assert_called_once()
         assert coordinator.device == mock_device
+

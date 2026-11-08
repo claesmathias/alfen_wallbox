@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.7.0] - 2026-11-08
+
+Aligned with the upstream project (leeyuentuen/alfen_wallbox, up to 2026-11-05).
+
+### Added
+
+- **Zeroconf discovery** — Home Assistant finds the wallbox on the network and pre-fills
+  its address; an entry set up by hand for the same host is adopted
+- **Charging switch** (`switch.<name>_charging`, same entity as upstream) — off pauses,
+  on resumes charging, using the Eve Connect pause profile (the station maximum current
+  is left untouched)
+- **Token login** for wallbox firmware that returns a JWT on login: the token is sent as
+  `Authorization: Bearer` on every request (and never logged)
+- Warning on setup when the `logs` / `transactions` categories are not refreshed, and
+  README sections on the tag / transaction sensors and which entity is in which category
+
+### Changed
+
+- Minimum Home Assistant version 2024.12.0
+- Failed logins back off for 5 minutes instead of being retried every update; only
+  failed logins count towards the login rate limit
+- The scheduled log / transaction fetch runs in the first update cycle (no longer empty
+  for up to 20 minutes after a restart) with its own 5 s time budget; an unfinished fetch
+  continues on the next cycles
+
+### Fixed
+
+- **Home Assistant's shared SSL context was modified**: certificate verification was
+  switched off for the process-wide default context, affecting every other integration.
+  The wallbox now uses a private SSL context
+- **Values the wallbox rejects** (HTTP 400/403/404/405/409/422) were retried forever,
+  keeping the update queue busy and breaking the single session; they are now reported
+  once and dropped
+- Display state 27/28 ("see error number") reported an error while the error number was
+  0; it now shows "No Error" or the actual error
+- Sensors with rounding failed on a `null` value from the wallbox
+
 ## [3.6.1] - 2026-11-08
 
 ### Documentation

@@ -478,6 +478,9 @@
             },
             "charging_schedule_enabled": {
                 "name": "Laadschema"
+            },
+            "charging": {
+                "name": "Laden"
             }
         },
         "button": {

@@ -14,9 +14,9 @@ import json
 from typing import Any
 
 from aiohttp import web
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.http.auth import async_sign_path
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.http import HomeAssistantView
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN

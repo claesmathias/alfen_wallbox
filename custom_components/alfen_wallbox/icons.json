@@ -203,6 +203,9 @@
             },
             "charging_schedule_enabled": {
                 "default": "mdi:calendar-clock"
+            },
+            "charging": {
+                "default": "mdi:ev-station"
             }
         },
         "button": {

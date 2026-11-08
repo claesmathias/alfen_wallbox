@@ -95,7 +95,7 @@ async def test_export_button_creates_notification(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
     coordinator = MagicMock()
     coordinator.hass = hass
-    coordinator.config_entry = entry
+    coordinator.entry = entry
     coordinator.device.name = "Alfen"
     coordinator.device.transactions = SESSIONS
 

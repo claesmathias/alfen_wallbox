@@ -89,6 +89,10 @@ TRANSACTION_NOISE_PATTERN = re.compile(r"AP;.*?; |\(null\) ")
 TRANSACTION_RECORD_PATTERN = re.compile(r"^\s*(\d+)_([a-z]+\d*):")
 # Safety limits for one transaction-log fetch
 MAX_TRANSACTION_OFFSET = 100_000_000
+# Own time budget for the scheduled log / transaction fetch inside an update cycle
+# (cycles take 3-7 s without it; the coordinator times out at 30 s)
+HISTORY_FETCH_TIMEOUT = 5  # seconds
+MAX_HISTORY_FETCH_RETRIES = 20
 MAX_SPLIT_INTERVAL = 120  # s; cap gaps between updates when integrating solar / grid energy
 MAX_STORED_TRANSACTIONS = 5000  # sessions kept in .storage
 MAX_TRANSACTION_REQUESTS = 100  # per update cycle (~11 s, below the 30 s timeout)
@@ -102,7 +106,15 @@ class ChargingProfileError(Exception):
 
 # Rate limiting constants for login attempts
 LOGIN_RATE_LIMIT_WINDOW = 60  # seconds
-LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5  # max attempts per window
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5  # max failed attempts per window
+# Avoid retrying an unreachable wallbox on every coordinator update (load and
+# log spam while it is offline).
+LOGIN_FAILURE_BACKOFF = 300  # seconds
+
+# HTTP statuses with which the wallbox rejects a value update permanently.
+# Retrying those keeps the update queue busy forever and, on wallboxes that only
+# allow one session at a time, it also breaks every other request.
+REJECTED_VALUE_STATUSES = frozenset({400, 403, 404, 405, 409, 422})
 
 # Valid characters for API parameter IDs (alphanumeric, underscore, hyphen)
 API_PARAM_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -144,8 +156,11 @@ class AlfenDevice:
         self.max_allowed_phases = 1
         self.latest_tag: dict[tuple[str, str, str], Any] | None = None
         self.transaction_offset = 0
-        self.transaction_counter = 0
-        self.log_counter = 0
+        # -1: fetch the log and the new transactions in the first update cycle, so
+        # the tag / transaction sensors are filled right after a restart
+        self.transaction_counter = -1
+        self.log_counter = -1
+        self.history_fetch_retries = 0
         # Scan interval in seconds (kept in sync by coordinator via options_update_listener)
         self.scan_interval: int = DEFAULT_SCAN_INTERVAL
         # Cached charging profiles, refreshed every ~5 min and after every change.
@@ -197,8 +212,11 @@ class AlfenDevice:
         self._value_updated_callback = value_updated_callback
         # Callback to recreate session after logout closes the connection
         self._session_recreate_callback: Callable[[], Any] | None = None
-        # Rate limiting for login attempts (security)
+        # Rate limiting for failed login attempts (security)
         self._login_attempts: list[float] = []
+        self._login_retry_after = 0.0
+        # JWT access token from the login response (firmware with token auth)
+        self._access_token: str | None = None
         # force update transaction
         self.force_update_transaction = False
         # Background "Load history" progress (Insights tab)
@@ -242,7 +260,9 @@ class AlfenDevice:
 
     async def get_info(self) -> bool:
         """Get info from the API."""
-        response = await self._session.get(url=self.__get_url(INFO), ssl=self.ssl)
+        response = await self._session.get(
+            url=self.__get_url(INFO), headers=self._auth_headers(), ssl=self.ssl
+        )
         _LOGGER.debug("[%s] Response %s", self.log_id, str(response))
 
         if response.status == 200:
@@ -316,6 +336,7 @@ class AlfenDevice:
         value_was_updated = False
         updated_categories = set()  # Track which categories had updates
         successfully_processed_keys = set()  # Track which keys were successfully processed
+        rejected_keys: set[str] = set()  # Values the wallbox refused permanently
 
         if values:
             _LOGGER.debug("[%s] Processing %d pending value updates", self.log_id, len(values))
@@ -323,7 +344,7 @@ class AlfenDevice:
         for key, value in values.items():
             response = await self._update_value(value["api_param"], value["value"])
 
-            if response:
+            if response is True:
                 # Update the value in the properties dict
                 if value["api_param"] in self.properties:
                     prop = self.properties[value["api_param"]]
@@ -341,6 +362,10 @@ class AlfenDevice:
                 # Track this key for deletion (but don't delete yet to avoid race condition)
                 successfully_processed_keys.add(key)
                 value_was_updated = True
+            elif response is False:
+                # Rejected permanently (logged in _update_value): drop it so it does
+                # not keep the update cycle - and the single session - busy forever.
+                rejected_keys.add(key)
             else:
                 # Log failure but don't remove from update_values so it will retry
                 _LOGGER.warning(
@@ -350,11 +375,12 @@ class AlfenDevice:
                     value["value"],
                 )
 
-        # Remove all successfully processed keys in a single locked operation
-        # This prevents race condition where new values are added during processing
-        if successfully_processed_keys:
+        # Remove all successfully processed and rejected keys in a single locked
+        # operation. This prevents race condition where new values are added during
+        # processing.
+        if successfully_processed_keys or rejected_keys:
             async with self._update_values_lock:
-                for key in successfully_processed_keys:
+                for key in successfully_processed_keys | rejected_keys:
                     # Check key still exists and has same value we processed
                     # If value changed, keep it in queue for next cycle
                     if key in self.update_values:
@@ -534,10 +560,10 @@ class AlfenDevice:
         transaction_cycles = max(1, round(1200 / self.scan_interval))  # ~20 min
         schedule_cycles = max(1, round(300 / self.scan_interval))       # ~5 min
 
+        run_logs = False
         if CAT_LOGS in self.category_options:
             self.log_counter = (self.log_counter + 1) % log_cycles
-            if self.log_counter == 0:
-                await self._get_log()
+            run_logs = self.log_counter == 0
 
         run_transactions = False
         if self.force_update_transaction:
@@ -547,14 +573,56 @@ class AlfenDevice:
             self.transaction_counter = (self.transaction_counter + 1) % transaction_cycles
             run_transactions = self.transaction_counter == 0
         # Skip while a background history load is reading the log
-        if run_transactions and not self._transaction_lock.locked():
-            async with self._transaction_lock:
-                await self._get_transaction()
+        run_transactions = run_transactions and not self._transaction_lock.locked()
+
+        if run_logs or run_transactions:
+            await self._fetch_history_within_budget(run_logs, run_transactions)
 
         # schedule_counter starts at -1 so the first increment to 0 triggers fetch immediately
         self.schedule_counter = (self.schedule_counter + 1) % schedule_cycles
         if self.schedule_counter == 0:
             await self.async_update_charging_profiles()
+
+    async def _fetch_history_within_budget(self, run_logs: bool, run_transactions: bool) -> None:
+        """Fetch log / transaction history with its own time budget.
+
+        Walking the history can take longer than an update cycle allows; a slow
+        wallbox must not fail the whole update. An unfinished fetch keeps what it
+        read, continues from its saved position on the next cycles (up to
+        MAX_HISTORY_FETCH_RETRIES) and then returns to the normal schedule.
+        """
+        try:
+            async with timeout(HISTORY_FETCH_TIMEOUT):
+                if run_logs:
+                    await self._get_log()
+                if run_transactions:
+                    async with self._transaction_lock:
+                        await self._get_transaction()
+        except TimeoutError:
+            self._rebuild_transactions()  # keep the sessions read so far
+            self.history_fetch_retries += 1
+            if self.history_fetch_retries == 1:
+                _LOGGER.warning(
+                    "[%s] Fetching logs/transactions did not finish within %ds, "
+                    "keeping the current data - the rest is fetched in the next cycles",
+                    self.log_id,
+                    HISTORY_FETCH_TIMEOUT,
+                )
+            if self.history_fetch_retries <= MAX_HISTORY_FETCH_RETRIES:
+                if run_logs:
+                    self.log_counter = -1
+                if run_transactions:
+                    self.transaction_counter = -1
+            else:
+                _LOGGER.warning(
+                    "[%s] Fetching logs/transactions still unfinished after %d attempts, "
+                    "returning to the normal schedule (use Load history for the rest)",
+                    self.log_id,
+                    MAX_HISTORY_FETCH_RETRIES,
+                )
+                self.history_fetch_retries = 0
+        else:
+            self.history_fetch_retries = 0
 
     async def async_update(self) -> bool:
         """Update the device properties.
@@ -644,7 +712,7 @@ class AlfenDevice:
                 async with self._session.post(
                     url=self.__get_url(cmd),
                     json=payload,
-                    headers=POST_HEADER_JSON,
+                    headers=self._auth_headers(POST_HEADER_JSON),
                     timeout=ClientTimeout(total=DEFAULT_TIMEOUT),
                     ssl=self.ssl,
                 ) as response:
@@ -741,7 +809,10 @@ class AlfenDevice:
                     )
 
                 async with self._session.get(
-                    url, timeout=ClientTimeout(total=DEFAULT_TIMEOUT), ssl=self.ssl
+                    url,
+                    headers=self._auth_headers(),
+                    timeout=ClientTimeout(total=DEFAULT_TIMEOUT),
+                    ssl=self.ssl,
                 ) as response:
                     if response.status == 401 and allowed_login:
                         self.logged_in = False
@@ -789,6 +860,13 @@ class AlfenDevice:
 
         """
         current_time = time.time()
+        if current_time < self._login_retry_after:
+            _LOGGER.debug(
+                "[%s] Login deferred for another %.0fs after a previous failure",
+                self.log_id,
+                self._login_retry_after - current_time,
+            )
+            return False
         # Remove old attempts outside the window
         self._login_attempts = [
             t for t in self._login_attempts if current_time - t < LOGIN_RATE_LIMIT_WINDOW
@@ -801,12 +879,20 @@ class AlfenDevice:
                 len(self._login_attempts),
                 LOGIN_RATE_LIMIT_WINDOW,
             )
+            self._login_retry_after = current_time + LOGIN_FAILURE_BACKOFF
             return False
         return True
 
     def _record_login_attempt(self) -> None:
-        """Record a login attempt for rate limiting."""
+        """Record a failed login attempt for rate limiting."""
         self._login_attempts.append(time.time())
+
+    def _auth_headers(self, base: dict[str, str] | None = None) -> dict[str, str]:
+        """Build request headers, adding the Bearer token if we have one."""
+        headers = dict(base) if base else {}
+        if self._access_token:
+            headers["Authorization"] = f"Bearer {self._access_token}"
+        return headers
 
     @staticmethod
     def _sanitize_exception(exc: Exception) -> str:
@@ -922,13 +1008,10 @@ class AlfenDevice:
             if self.logged_in:
                 return
 
-            # Check rate limiting before attempting login
+            # Check rate limiting / backoff before attempting login
             if not self._check_login_rate_limit():
-                _LOGGER.warning("[%s] Login blocked by rate limiter", self.log_id)
+                _LOGGER.debug("[%s] Login postponed by the retry limiter", self.log_id)
                 return
-
-            # Record this login attempt
-            self._record_login_attempt()
 
             await self._do_login()
 
@@ -968,7 +1051,7 @@ class AlfenDevice:
                             # Use friendly name (truncated to 32 chars) as session display name
                             PARAM_DISPLAY_NAME: self.name[:32] if self.name else "HomeAssistant",
                         },
-                        headers=POST_HEADER_JSON,
+                        headers=POST_HEADER_JSON,  # no token: this request obtains it
                         timeout=ClientTimeout(total=DEFAULT_TIMEOUT),
                         ssl=self.ssl,
                     ) as http_response:
@@ -1005,9 +1088,15 @@ class AlfenDevice:
 
             # Only set logged_in = True if we got here without exception
             self.logged_in = True
+            self._login_retry_after = 0.0
+            self._login_attempts.clear()
             self.last_updated = datetime.datetime.now()
 
-            if response is None:
+            if isinstance(response, dict) and response.get("access"):
+                # Firmware with token auth: send the JWT on every following request
+                self._access_token = response["access"]
+                _LOGGER.debug("[%s] Login successful, JWT access token stored", self.log_id)
+            elif response is None:
                 _LOGGER.debug(
                     "[%s] Login successful (no response body or malformed JSON)",
                     self.log_id,
@@ -1020,6 +1109,10 @@ class AlfenDevice:
                 self.log_id,
                 self._sanitize_exception(e),
             )
+            # Only failed logins count towards the rate limit: logging in again after
+            # the wallbox closed the connection is normal behaviour.
+            self._record_login_attempt()
+            self._login_retry_after = time.time() + LOGIN_FAILURE_BACKOFF
             # Ensure logged_in stays False on error
             self.logged_in = False
             return
@@ -1031,6 +1124,7 @@ class AlfenDevice:
         try:
             response = await self._post(cmd=LOGOUT, allowed_login=False)
             self.logged_in = False
+            self._access_token = None
             self.last_updated = datetime.datetime.now()
 
             if response is None:
@@ -1059,7 +1153,14 @@ class AlfenDevice:
     async def _update_value(
         self, api_param: str, value: Any, allowed_login: bool = True
     ) -> bool | None:
-        """Update a value on the API."""
+        """Update a value on the API.
+
+        Returns:
+            True if the wallbox accepted the value, False if it rejected it
+            permanently (the queued value is then dropped instead of retried) and
+            None if the update failed temporarily and should be retried.
+
+        """
         if self.keep_logout:
             return None
 
@@ -1069,7 +1170,7 @@ class AlfenDevice:
                 async with self._session.post(
                     url=self.__get_url(PROP),
                     json={api_param: {ID: api_param, VALUE: str(value)}},
-                    headers=POST_HEADER_JSON,
+                    headers=self._auth_headers(POST_HEADER_JSON),
                     timeout=ClientTimeout(total=DEFAULT_TIMEOUT),
                     ssl=self.ssl,
                 ) as response:
@@ -1080,6 +1181,16 @@ class AlfenDevice:
                             self.log_id,
                         )
                         needs_auth = True
+                    elif response.status in REJECTED_VALUE_STATUSES:
+                        # The wallbox refuses this value, so retrying it is pointless
+                        _LOGGER.error(
+                            "[%s] Wallbox rejected %s = %s with HTTP %d, not retrying",
+                            self.log_id,
+                            api_param,
+                            value,
+                            response.status,
+                        )
+                        return False
                     else:
                         response.raise_for_status()
                         # Note: Wallbox may close connection after value updates
@@ -1298,7 +1409,7 @@ class AlfenDevice:
                 async with self._lock, self._session.post(
                     url=self.__get_url(cmd),
                     json=payload,
-                    headers=POST_HEADER_JSON,
+                    headers=self._auth_headers(POST_HEADER_JSON),
                     timeout=ClientTimeout(total=DEFAULT_TIMEOUT),
                     ssl=self.ssl,
                 ) as response:

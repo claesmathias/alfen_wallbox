@@ -152,6 +152,17 @@ DISPLAY_ERROR_DICT: Final[dict[int, str]] = {
     407: "Not displayed",
 }
 
+# The wallbox reports these display states while it switches between states, for
+# example during solar charging. The display then refers to the error number
+# (3190_2 / 3191_2), so only that tells whether something is actually wrong.
+DISPLAY_ERROR_STATES: Final[frozenset[int]] = frozenset({27, 28})
+
+# Display state parameter -> error number parameter, per socket
+DISPLAY_ERROR_NUMBER_API_PARAMS: Final[dict[str, str]] = {
+    "3190_1": "3190_2",
+    "3191_1": "3191_2",
+}
+
 MODE_3_STAT_DICT: Final[dict[int, str]] = {
     160: "STATE_A",
     161: "STATE_A1",
@@ -2219,6 +2230,18 @@ class AlfenSensor(AlfenEntity, SensorEntity):
             )
         return value
 
+    def _display_error_state(self, error_param: str) -> str:
+        """Display state 27/28: report an error only if the error number says so."""
+        error_prop = self.coordinator.device.properties.get(error_param)
+        try:
+            error_number = int(error_prop[VALUE]) if error_prop else 0
+        except (TypeError, ValueError):
+            error_number = 0
+        if error_number == 0:
+            return "No Error"
+        error_text = DISPLAY_ERROR_DICT.get(error_number, f"Unknown error {error_number}")
+        return f"See error Number: {error_text}"
+
     @property
     def native_value(self) -> StateType:
         """Return the state of the sensor."""
@@ -2293,9 +2316,9 @@ class AlfenSensor(AlfenEntity, SensorEntity):
             # some exception of return value
 
             # Display state status
-            if self.entity_description.api_param in ("3190_1", "3191_1"):
-                if prop[VALUE] == 28:
-                    return "See error Number"
+            if error_param := DISPLAY_ERROR_NUMBER_API_PARAMS.get(self.entity_description.api_param):
+                if prop[VALUE] in DISPLAY_ERROR_STATES:
+                    return self._display_error_state(error_param)
 
                 return STATUS_DICT.get(prop[VALUE], "Unknown")
 
@@ -2345,7 +2368,10 @@ class AlfenSensor(AlfenEntity, SensorEntity):
                 return ALLOWED_PHASE_DICT.get(prop[VALUE], "Unknown")
 
             if self.entity_description.round_digits is not None:
-                # check prop[VALUE] if it is an integer
+                # The wallbox can report a property with a null value (e.g. no car
+                # connected) - guard against that before rounding.
+                if prop[VALUE] is None:
+                    return None
                 return round(prop[VALUE], self.entity_description.round_digits)
 
             # mode3_state
