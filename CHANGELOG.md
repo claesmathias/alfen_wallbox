@@ -4,10 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [3.6.0] - 2026-11-08
 
-Compared against the official **Eve Connect 1.5.4** (end-user) and **MyEve 2.3.1**
-(installer) Android apps. Charge control, maximum power and the schedule now use
-exactly the same charging profiles as Eve Connect, so the app and Home Assistant
-show and control the same state.
+Charge control, maximum power and the schedule now use exactly the same charging
+profiles as the official Eve Connect app, so the app and Home Assistant show and
+control the same state.
 
 ### Added
 

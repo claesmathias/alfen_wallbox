@@ -2,8 +2,8 @@
 
 Everything in this module is pure Python (no Home Assistant imports) so it can be
 unit tested in isolation. The request formats, profile IDs, stack levels and the
-power/phase maths were taken from the Eve Connect app (com.alfen.maple 1.5.4) so
-that profiles written by Home Assistant are understood by the app and vice versa.
+power/phase maths match the Eve Connect app, so that profiles written by Home
+Assistant are understood by the app and vice versa.
 """
 
 from __future__ import annotations

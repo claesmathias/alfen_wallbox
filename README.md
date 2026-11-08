@@ -9,9 +9,8 @@ The component is a fork of the [Garo Wallbox custom integration](https://github.
 
 ### Eve Connect feature parity & dashboard (November 2026, v3.6.0)
 
-The integration was compared against the official **Eve Connect** app (and the
-**MyEve** installer app). Home Assistant now uses the *same* charging profiles as
-Eve Connect, so pausing, boosting, the maximum power and the weekly schedule are
+Home Assistant now uses the *same* charging profiles as the official
+**Eve Connect** app, so pausing, boosting, the maximum power and the weekly schedule are
 shared: change it in one, see it in the other.
 
 - 🏠 **Charge Control** — `Charging` / `Paused` / `Boost` (3 h at full power), like the app's home screen

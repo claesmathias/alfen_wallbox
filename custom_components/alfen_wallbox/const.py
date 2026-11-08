@@ -59,8 +59,7 @@ CLEAR_SCHEDULE_DAYS = "Clear Schedule Days"
 EXPORT_HISTORY = "Export Charging History"
 
 # ---------------------------------------------------------------------------
-# Charging-profile protocol used by the official Eve Connect app
-# (reverse engineered from com.alfen.maple 1.5.4). Using the exact same IDs,
+# Charging-profile protocol used by the official Eve Connect app. Using the exact same IDs,
 # purpose and stack levels keeps Home Assistant and the app in sync: a pause or
 # boost started in one is shown correctly in the other.
 # ---------------------------------------------------------------------------

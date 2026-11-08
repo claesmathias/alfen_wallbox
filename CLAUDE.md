@@ -35,8 +35,8 @@ This is a Home Assistant custom integration for Alfen EV Wallboxes. It enables l
 
 ### Charging Profiles — Eve Connect protocol (since 3.6.0)
 
-Charge control, maximum power and the weekly schedule mirror the official Eve Connect
-app (reverse engineered from `com.alfen.maple` 1.5.4) so app and HA share state.
+Charge control, maximum power and the weekly schedule use the same charging profiles
+as the official Eve Connect app, so app and HA share state.
 Pure helpers live in [charging.py](custom_components/alfen_wallbox/charging.py) (no HA
 imports, unit tested in `tests/test_charging.py`); `AlfenDevice` wraps them.
 
