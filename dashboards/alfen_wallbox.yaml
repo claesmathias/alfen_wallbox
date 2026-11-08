@@ -4,17 +4,18 @@
 # Uses only built-in cards (no HACS frontend cards needed). Requires Home
 # Assistant 2024.8 or newer (sections views and tile card features).
 #
-# Installation
-#   1. Settings → Dashboards → Add dashboard → "New dashboard from scratch".
-#   2. Open it, ⋮ → Edit dashboard → ⋮ → Raw configuration editor.
-#   3. Paste this file.
-#   4. Entity IDs assume the wallbox was named "Alfen Wallbox" during setup.
-#      If you used another name, find/replace "alfen_wallbox_" with your own
-#      prefix (e.g. "garage_" for a wallbox named "Garage").
+# Installation (see the README for details)
+#   1. Check your entity prefix: Settings → Devices & services → Alfen Wallbox →
+#      entities. This file uses "alfen_wallbox_" (wallbox named "Alfen Wallbox"
+#      during setup). Renaming the device later does not change entity IDs.
+#      If yours differs, find/replace "alfen_wallbox_" with your prefix,
+#      e.g. "garage_alfen_wallbox_".
+#   2. Settings → Dashboards → Add dashboard → "New dashboard from scratch".
+#   3. Open it, pencil → ⋮ → Raw configuration editor, select all (Ctrl/⌘+A),
+#      paste this file (Ctrl/⌘+V) and Save.
+#   4. Insights tab: press "Load history" once.
 #
 # Notes
-#   - Insights needs transaction history: either enable the "transactions"
-#     category in the integration options, or press "Force Fetch Transaction".
 #   - "Maximum charging power", Boost, Pause and the schedule are stored on the
 #     wallbox in the same format as Eve Connect, so both stay in sync.
 

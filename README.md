@@ -357,13 +357,61 @@ Connect app with built-in cards only (Home Assistant 2024.8+):
 | **Insights** | Charged energy this month / last month / this year / total and the last session (native table), *Load history* with progress, and an *Export charging history* button; the CSV / JSON download links appear in HA's notifications |
 | **Settings** | Model, serial, firmware, phases, connector, uptime, WiFi; log out/in (to use the app locally), refresh schedule, reboot |
 
-**Install:** *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
-open it, *⋮ → Edit dashboard → ⋮ → Raw configuration editor* and paste the file.
-Entity IDs assume the wallbox was named **Alfen Wallbox**; otherwise find/replace
-`alfen_wallbox_` with your own prefix.
+### Installing the dashboard
 
-For the Insights history, enable the `transactions` category in the integration
-options (or press *Load history* on the Insights tab).
+Requirements: Home Assistant **2024.8 or newer** and this integration **3.6.0 or newer**.
+
+**1. Find your entity prefix.** The dashboard uses entity IDs that start with
+`alfen_wallbox_` (a wallbox named *Alfen Wallbox* during setup). To see yours, open
+*Settings → Devices & services → Alfen Wallbox → entities* and look at any entity ID,
+e.g. `select.garage_alfen_wallbox_auth_mode` → prefix `garage_alfen_wallbox_`.
+
+> Renaming the device later does **not** change existing entity IDs, so always check
+> the actual IDs.
+
+**2. Adjust the file if your prefix differs.** Replace `alfen_wallbox_` with your
+prefix, e.g. in a terminal (macOS/Linux) — this also copies the result to the
+clipboard on macOS:
+
+```bash
+sed 's/\([a-z_]\.\)alfen_wallbox_/\1garage_alfen_wallbox_/g' dashboards/alfen_wallbox.yaml > my_dashboard.yaml
+pbcopy < my_dashboard.yaml   # macOS; or open the file and copy everything
+```
+
+**3. Create the dashboard.**
+1. *Settings → Dashboards → **+ Add dashboard** → **New dashboard from scratch***.
+   Name it e.g. *Alfen Wallbox*, icon `mdi:ev-station`, and open it from the sidebar.
+2. Click the **pencil** (top right) → **⋮** → **Raw configuration editor**.
+3. Click inside the text box, press **Ctrl/⌘ + A** to select the existing text, then
+   **Ctrl/⌘ + V** to replace it with the dashboard file. It starts with
+   `# Alfen Wallbox dashboard` and `title: Alfen Wallbox`.
+4. Click **Save**, close the editor with **✕** and click **Done**.
+
+You should now see the tabs *Home, Power, Schedule, Insights, Settings*.
+
+**4. Load the charging history.** On the *Insights* tab press **Load history** once
+(the first run reads the whole log and can take a few minutes; after that the
+history is saved and only new sessions are read). To keep it updated automatically,
+enable the `transactions` category in the integration options.
+
+<details>
+<summary>Alternative: YAML-mode dashboard (file in the config folder)</summary>
+
+Copy the (adjusted) file to `<config>/dashboards/alfen_wallbox.yaml`, add this to
+`configuration.yaml` and restart Home Assistant. Changes to the file then show up
+after a browser refresh.
+
+```yaml
+lovelace:
+  dashboards:
+    alfen-wallbox:
+      mode: yaml
+      filename: dashboards/alfen_wallbox.yaml
+      title: Alfen Wallbox
+      icon: mdi:ev-station
+      show_in_sidebar: true
+```
+</details>
 
 ## Development & Testing
 

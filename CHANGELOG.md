@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.1] - 2026-11-08
+
+### Documentation
+
+- Step-by-step dashboard installation in the README: how to find your entity prefix
+  (renaming the device does not change entity IDs), a ready-made command to adjust the
+  dashboard file, and a click-by-click guide for the Raw configuration editor
+- Updated installation notes at the top of `dashboards/alfen_wallbox.yaml`
+  ("Load history" instead of "Force Fetch Transaction")
+
 ## [3.6.0] - 2026-11-08
 
 Charge control, maximum power and the schedule now use exactly the same charging
