@@ -1,7 +1,6 @@
 """Support for Alfen Eve Proline binary sensors."""
 
 from dataclasses import dataclass
-import datetime
 import logging
 from typing import Any, Final
 
@@ -15,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .calendar import WEEKDAY_MAP, _normalize_periods, _seconds_to_time
+from . import charging
 from .const import (
     CAT,
     LICENSE_HIGH_POWER,
@@ -27,6 +26,8 @@ from .const import (
     LICENSE_PERSONALIZED_DISPLAY,
     LICENSE_RFID,
     LICENSE_SCN,
+    PROP_LIMITING_FACTOR,
+    PROP_MAIN_STATE_SOCKET_1,
     VALUE,
 )
 from .coordinator import AlfenConfigEntry
@@ -136,7 +137,9 @@ async def async_setup_entry(
     ]
 
     async_add_entities(binaries)
-    async_add_entities([AlfenChargingWindowBinarySensor(entry)])
+    async_add_entities(
+        [AlfenChargingWindowBinarySensor(entry), AlfenChargingRestrictedBinarySensor(entry)]
+    )
 
 
 class AlfenBinarySensor(AlfenEntity, BinarySensorEntity):
@@ -171,9 +174,7 @@ class AlfenBinarySensor(AlfenEntity, BinarySensorEntity):
                 )
             if self.entity_description.key == "license_static_loadbalancing":
                 self._attr_is_on = (
-                    LICENSE_SCN in licenses
-                    or LICENSE_LOAD_BALANCING_STATIC in licenses
-                    or LICENSE_LOAD_BALANCING_STATIC in licenses
+                    LICENSE_SCN in licenses or LICENSE_LOAD_BALANCING_STATIC in licenses
                 )
             if self.entity_description.key == "license_high_power_sockets":
                 self._attr_is_on = LICENSE_HIGH_POWER in licenses
@@ -242,65 +243,67 @@ class AlfenChargingWindowBinarySensor(AlfenEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.RUNNING
 
     def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
         super().__init__(entry)
         device = self.coordinator.device
         self._attr_name = f"{device.name} Charging Window Active"
         self._attr_unique_id = f"{device.id}-charging_window_active"
 
     def _active_window(self) -> dict | None:
-        """Return the currently active charging window dict, or None."""
-        now = dt_util.now()
-        today_weekday = now.weekday()
-        seconds_now = now.hour * 3600 + now.minute * 60 + now.second
-
-        for profile in self.coordinator.device.charging_profiles:
-            start_schedule = profile.get("startSchedule")
-            if start_schedule:
-                try:
-                    anchor = datetime.datetime.fromisoformat(
-                        start_schedule.replace("Z", "+00:00")
-                    )
-                    if anchor.weekday() != today_weekday:
-                        continue
-                except (ValueError, AttributeError):
-                    continue
-            else:
-                recurrency = profile.get("recurrencyKind", "DAILY")
-                if recurrency in ("WEEKLY", "Weekly"):
-                    days_of_week = profile.get("daysOfWeek", [])
-                    if today_weekday not in {
-                        WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP
-                    }:
-                        continue
-
-            for idx, (sp, limit, phases) in enumerate(_normalize_periods(profile)):
-                if limit <= 0:
-                    continue
-                end_sp: int | None = None
-                for next_sp, next_limit, _ in _normalize_periods(profile)[idx + 1 :]:
-                    if next_limit == 0:
-                        end_sp = next_sp
-                        break
-                if end_sp is None:
-                    end_sp = sp + 86400
-
-                if sp <= seconds_now < end_sp:
-                    return {
-                        "start": _seconds_to_time(sp).strftime("%H:%M"),
-                        "end": _seconds_to_time(end_sp).strftime("%H:%M"),
-                        "power_kw": round(limit * phases * 230 / 1000, 1),
-                        "current_a": limit,
-                        "phases": phases,
-                    }
-        return None
+        """Return the currently active time slot as a dict, or None."""
+        schedule = charging.schedule_from_profiles(self.coordinator.device.charging_profiles)
+        slot = charging.active_slot(schedule, dt_util.now())
+        return slot.as_dict() if slot else None
 
     @property
     def is_on(self) -> bool:
+        """Return True inside a scheduled time slot."""
         return self._active_window() is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        window = self._active_window()
-        if window is None:
+        """Return the active slot."""
+        return self._active_window()
+
+
+class AlfenChargingRestrictedBinarySensor(AlfenEntity, BinarySensorEntity):
+    """On while a vehicle is connected and charging is held back by the
+    installation, load balancing or the vehicle (Eve Connect "Charging restricted").
+    """
+
+    _attr_icon = "mdi:speedometer-slow"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_translation_key = "charging_restricted"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Restricted"
+        self._attr_unique_id = f"{device.id}-charging_restricted"
+
+    @property
+    def available(self) -> bool:
+        """Return True when the wallbox reports a limiting factor."""
+        return PROP_LIMITING_FACTOR in self.coordinator.device.properties
+
+    def _group(self) -> str | None:
+        properties = self.coordinator.device.properties
+        try:
+            state = int(properties[PROP_MAIN_STATE_SOCKET_1][VALUE])
+        except (KeyError, TypeError, ValueError):
             return None
-        return window
+        if state not in charging.CHARGING_MAIN_STATES:
+            return None
+        flags = charging.decode_limiting_factor(properties.get(PROP_LIMITING_FACTOR, {}).get(VALUE))
+        return charging.limiting_group(flags)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True while charging is restricted."""
+        return self._group() is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return why charging is restricted (load_balancing, vehicle, installation)."""
+        return {"reason": self._group()}

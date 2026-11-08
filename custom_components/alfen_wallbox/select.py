@@ -1,16 +1,25 @@
 """Alfen Wallbox Select Entities."""
 
 from dataclasses import dataclass
+import datetime
 from typing import Final
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import voluptuous as vol
 
+from .alfen import ChargingProfileError
 from .const import (
     CAT,
+    CHARGE_CONTROL_BOOST,
+    CHARGE_CONTROL_CHARGING,
+    CHARGE_CONTROL_PAUSED,
+    SCHEDULE_DAY_KEYS,
+    SCHEDULE_DAY_OPTIONS,
     SERVICE_DISABLE_RFID_AUTHORIZATION_MODE,
     SERVICE_ENABLE_RFID_AUTHORIZATION_MODE,
     SERVICE_SET_CURRENT_PHASE,
@@ -35,6 +44,13 @@ class AlfenSelectDescription(SelectEntityDescription, AlfenSelectDescriptionMixi
 
 
 CHARGING_MODE_DICT: Final[dict[str, int]] = {"Disable": 0, "Comfort": 1, "Green": 2}
+
+CHARGE_CONTROL_OPTIONS: Final[dict[str, str]] = {
+    "Charging": CHARGE_CONTROL_CHARGING,
+    "Paused": CHARGE_CONTROL_PAUSED,
+    "Boost": CHARGE_CONTROL_BOOST,
+}
+
 
 PHASE_ROTATION_DICT: Final[dict[str, str]] = {
     "L1": "L1",
@@ -171,6 +187,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=PHASE_ROTATION_DICT,
         api_param="2069_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="auth_mode",
@@ -180,6 +197,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=AUTH_MODE_DICT,
         api_param="2126_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="load_balancing_protocol",
@@ -189,6 +207,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=LOAD_BALANCE_PROTOCOL_DICT,
         api_param="5217_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="lb_active_balancing_received_measurements",
@@ -198,6 +217,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=LOAD_BALANCE_RECEIVED_MEASUREMENTS_DICT,
         api_param="206F_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="display_language",
@@ -207,6 +227,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=DISPLAY_LANGUAGE_DICT,
         api_param="205D_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="bo_network_1_connection_priority",
@@ -216,6 +237,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=PRIORITIES_DICT,
         api_param="20F0_E",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="bo_network_2_connection_priority",
@@ -225,6 +247,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=PRIORITIES_DICT,
         api_param="20F1_E",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="socket_1_operation_mode",
@@ -234,6 +257,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=OPERATIVE_MODE_DICT,
         api_param="205F_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="gprs_network_mode",
@@ -243,6 +267,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=GPRS_NETWORK_MODE_DICT,
         api_param="2113_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="gprs_technology",
@@ -252,6 +277,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=GPRS_TECHNOLOGY_DICT,
         api_param="2114_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="lb_dsmr_smr_interface",
@@ -261,6 +287,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=DSMR_SMR_INTERFACE_DICT,
         api_param="2191_1",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="lb_data_source",
@@ -270,6 +297,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=LOAD_BALANCE_DATA_SOURCE_DICT,
         api_param="2530_1",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="ps_installation_max_allowed_phase",
@@ -279,6 +307,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=ALLOWED_PHASE_DICT,
         api_param="2189_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="ps_installation_direct_external_suspend_signal",
@@ -288,6 +317,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=DIRECT_EXTERNAL_SUSPEND_SIGNAL,
         api_param="216C_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="ps_socket_type_socket_1",
@@ -297,6 +327,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=SOCKET_TYPE_DICT,
         api_param="2125_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="ev_disconnect_action",
@@ -306,6 +337,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=CAR_DISCONNECT_ACTION_DICT,
         api_param="2137_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSelectDescription(
         key="wifi_security",
@@ -315,6 +347,7 @@ ALFEN_SELECT_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=WIFI_SECURITY_MODE_DICT,
         api_param="328C_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -327,6 +360,7 @@ ALFEN_SELECT_DUAL_SOCKET_TYPES: Final[tuple[AlfenSelectDescription, ...]] = (
         options_dict=SOCKET_TYPE_DICT,
         api_param="3125_0",
         read_only=False,
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -338,7 +372,11 @@ async def async_setup_entry(
 ) -> None:
     """Add Alfen Select from a config_entry."""
 
-    selects = [AlfenSelect(entry, description) for description in ALFEN_SELECT_TYPES]
+    selects: list[SelectEntity] = [
+        AlfenSelect(entry, description) for description in ALFEN_SELECT_TYPES
+    ]
+    selects.append(AlfenChargeControlSelect(entry))
+    selects.append(AlfenScheduleDaysSelect(entry))
 
     async_add_entities(selects)
 
@@ -454,3 +492,82 @@ class AlfenSelect(AlfenEntity, SelectEntity):
         await self.coordinator.device.set_rfid_auth_mode(False)
         await self.coordinator.device.set_value(self.entity_description.api_param, 0)
         self.async_write_ha_state()
+
+
+class AlfenChargeControlSelect(AlfenEntity, SelectEntity):
+    """Eve Connect home-screen charge control: Charging, Paused or Boost."""
+
+    _attr_icon = "mdi:ev-station"
+    _attr_translation_key = "charge_control"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charge Control"
+        self._attr_unique_id = f"{device.id}_charge_control"
+        self._attr_options = list(CHARGE_CONTROL_OPTIONS)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the active charge-control mode."""
+        mode = self.coordinator.device.charge_control
+        return next(
+            (label for label, value in CHARGE_CONTROL_OPTIONS.items() if value == mode),
+            None,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return when an active boost ends."""
+        ends = self.coordinator.device.boost_ends_at
+        return {"boost_ends_at": ends.isoformat() if ends else None}
+
+    async def async_select_option(self, option: str) -> None:
+        """Pause, resume or boost charging."""
+        try:
+            await self.coordinator.device.set_charge_control(CHARGE_CONTROL_OPTIONS[option])
+        except (ChargingProfileError, ValueError) as err:
+            raise HomeAssistantError(str(err)) from err
+
+
+class AlfenScheduleDaysSelect(AlfenEntity, SelectEntity):
+    """Days the draft time slot applies to (used by the schedule editor)."""
+
+    _attr_icon = "mdi:calendar-week"
+    _attr_translation_key = "schedule_slot_days"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Schedule Slot Days"
+        self._attr_unique_id = f"{device.id}_schedule_slot_days"
+        self._attr_options = list(SCHEDULE_DAY_OPTIONS)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the draft's days."""
+        return SCHEDULE_DAY_KEYS.get(self.coordinator.schedule_draft["days"], "Every day")
+
+    async def async_select_option(self, option: str) -> None:
+        """Store the draft's days and load their current slot for editing.
+
+        The first slot of the first selected day (if any) is copied into the
+        draft start / end / power, so editing is: pick day, adjust, save.
+        """
+        key = next(k for k, label in SCHEDULE_DAY_KEYS.items() if label == option)
+        draft = self.coordinator.schedule_draft
+        draft["days"] = key
+        device = self.coordinator.device
+        for weekday in SCHEDULE_DAY_OPTIONS[option]:
+            slots = device.schedule_day_slots(weekday)
+            if slots:
+                first = slots[0]
+                draft["start"] = datetime.time(first.start // 3600, (first.start % 3600) // 60)
+                end = first.end % 86400  # 24:00 -> 00:00 (= until midnight)
+                draft["end"] = datetime.time(end // 3600, (end % 3600) // 60)
+                draft["power_kw"] = first.power_kw
+                break
+        # Refresh the time / power editor entities as well
+        self.coordinator.async_update_listeners()

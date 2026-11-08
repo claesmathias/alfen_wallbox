@@ -17,7 +17,7 @@ from custom_components.alfen_wallbox.calendar import (
 )
 from custom_components.alfen_wallbox.sensor import AlfenScheduleSensor
 from custom_components.alfen_wallbox.button import ALFEN_BUTTON_TYPES, AlfenButton
-from custom_components.alfen_wallbox.const import CLEAR_CHARGING_PROFILES
+from custom_components.alfen_wallbox.const import CLEAR_CHARGING_SCHEDULE
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ def test_midnight_wrap_event_spans_midnight():
 
 def test_calendar_event_property_returns_none_when_no_profiles(calendar_entity):
     """event property is None when no profiles are loaded."""
-    calendar_entity._profiles = []
+    calendar_entity.coordinator.device.charging_profiles = []
     assert calendar_entity.event is None
 
 
@@ -273,7 +273,7 @@ def test_calendar_event_property_returns_active_event(calendar_entity):
             ],
         },
     }
-    calendar_entity._profiles = [all_day_profile]
+    calendar_entity.coordinator.device.charging_profiles = [all_day_profile]
     evt = calendar_entity.event
     assert evt is not None
     assert evt.summary == "Charging 11.0 kW"
@@ -295,7 +295,7 @@ def test_calendar_event_property_returns_none_outside_schedule(calendar_entity):
             ],
         },
     }
-    calendar_entity._profiles = [past_profile]
+    calendar_entity.coordinator.device.charging_profiles = [past_profile]
     # The window is 00:00:00 UTC – 00:00:01 UTC; almost certainly not active right now.
     # If by extreme chance the test runs exactly at midnight UTC, skip it.
     now = datetime.datetime.now(datetime.UTC)
@@ -316,7 +316,7 @@ async def test_calendar_async_get_events_daily(
     mock_coordinator,
 ) -> None:
     """async_get_events returns one event per day for a DAILY profile."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[DAILY_PROFILE])
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE]
 
     start = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
     end = datetime.datetime(2024, 6, 7, tzinfo=datetime.UTC)
@@ -334,7 +334,7 @@ async def test_calendar_async_get_events_weekly(
     mock_coordinator,
 ) -> None:
     """async_get_events returns events only on matching weekdays for WEEKLY profile."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[WEEKLY_PROFILE])
+    mock_coordinator.device.charging_profiles = [WEEKLY_PROFILE]
 
     # Week of 2024-01-01 (Mon) – 2024-01-07 (Sun)
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
@@ -352,7 +352,7 @@ async def test_calendar_async_get_events_empty_when_no_profiles(
     mock_coordinator,
 ) -> None:
     """async_get_events returns empty list when there are no profiles."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[])
+    mock_coordinator.device.charging_profiles = []
 
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
     end = datetime.datetime(2024, 1, 7, tzinfo=datetime.UTC)
@@ -368,9 +368,7 @@ async def test_calendar_async_get_events_multiple_profiles(
     mock_coordinator,
 ) -> None:
     """async_get_events aggregates events from all profiles."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(
-        return_value=[DAILY_PROFILE, WEEKLY_PROFILE]
-    )
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE, WEEKLY_PROFILE]
 
     # Single Monday
     start = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)  # Monday
@@ -383,32 +381,41 @@ async def test_calendar_async_get_events_multiple_profiles(
 
 
 # ---------------------------------------------------------------------------
-# CalendarEntity – _async_refresh_profiles
+# CalendarEntity – uses the cached profiles only
 # ---------------------------------------------------------------------------
 
 
-async def test_calendar_async_update_fetches_profiles(
+async def test_calendar_does_not_query_wallbox(
+    hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
     mock_coordinator,
 ) -> None:
-    """_async_refresh_profiles populates _profiles from the device."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(return_value=[DAILY_PROFILE])
+    """Viewing the calendar never adds requests to the wallbox."""
+    mock_coordinator.device.charging_profiles = [DAILY_PROFILE]
+    start = datetime.datetime(2024, 6, 1, tzinfo=datetime.UTC)
+    await calendar_entity.async_get_events(hass, start, start)
+    mock_coordinator.device.get_charging_profiles.assert_not_called()
 
-    await calendar_entity._async_refresh_profiles()
 
-    assert calendar_entity._profiles == [DAILY_PROFILE]
-
-
-async def test_calendar_async_update_handles_exception(
+async def test_calendar_shows_all_slots_of_a_day(
+    hass: HomeAssistant,
     calendar_entity: AlfenChargingScheduleCalendar,
     mock_coordinator,
 ) -> None:
-    """_async_refresh_profiles resets profiles to [] on exception."""
-    mock_coordinator.device.get_charging_profiles = AsyncMock(side_effect=Exception("API down"))
-
-    await calendar_entity._async_refresh_profiles()
-
-    assert calendar_entity._profiles == []
+    """Every slot of an Eve Connect day profile becomes an event."""
+    mock_coordinator.device.charging_profiles = [
+        {
+            "chargingProfileId": 234202401,
+            "recurrencyKind": "Weekly",
+            "startSchedule": "2024-03-31T22:00:00.000Z",  # Monday 00:00 CEST
+            "startPeriod": [0, 21600, 79200, 86400],
+            "limit": [16, 0, 10, 0],
+            "numberPhases": [3, 3, 1, 1],
+        }
+    ]
+    monday = datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC)
+    events = await calendar_entity.async_get_events(hass, monday, monday)
+    assert [e.summary for e in events] == ["Charging 11.0 kW", "Charging 2.3 kW"]
 
 
 # ---------------------------------------------------------------------------
@@ -553,9 +560,9 @@ async def test_clear_charging_profiles_button_exists():
 
 
 async def test_clear_charging_profiles_button_description():
-    """Clear charging profiles button has correct description fields."""
+    """Clear charging schedule button has correct description fields."""
     desc = next(d for d in ALFEN_BUTTON_TYPES if d.key == "clear_charging_profiles")
-    assert desc.url_action == CLEAR_CHARGING_PROFILES
+    assert desc.url_action == CLEAR_CHARGING_SCHEDULE
     assert desc.json_data is None
 
 
@@ -564,13 +571,17 @@ async def test_clear_charging_profiles_button_press(
     mock_config_entry: MockConfigEntry,
     mock_alfen_device,
 ) -> None:
-    """Pressing the clear charging profiles button calls device.clear_charging_profiles."""
+    """The "Clear Charging Schedule" button only clears the schedule profiles.
+
+    Max power, boost and pause profiles are left alone (it used to clear all).
+    """
     from custom_components.alfen_wallbox.coordinator import AlfenCoordinator
 
     mock_config_entry.add_to_hass(hass)
     coordinator = AlfenCoordinator(hass, mock_config_entry)
     coordinator.device = mock_alfen_device
     mock_alfen_device.clear_charging_profiles = AsyncMock()
+    mock_alfen_device.clear_schedule = AsyncMock()
     mock_config_entry.runtime_data = coordinator
 
     desc = next(d for d in ALFEN_BUTTON_TYPES if d.key == "clear_charging_profiles")
@@ -578,4 +589,17 @@ async def test_clear_charging_profiles_button_press(
 
     await button.async_press()
 
-    mock_alfen_device.clear_charging_profiles.assert_called_once()
+    mock_alfen_device.clear_schedule.assert_called_once_with()
+    mock_alfen_device.clear_charging_profiles.assert_not_called()
+
+
+def test_schedule_day_sensor_shows_slots_with_power(mock_config_entry, mock_coordinator):
+    """Day sensors list every slot with its power, for the weekday table."""
+    from custom_components.alfen_wallbox.sensor import AlfenScheduleDaySensor
+
+    mock_config_entry.runtime_data = mock_coordinator
+    monday = AlfenScheduleDaySensor(mock_config_entry, "Monday", 0)
+    sunday = AlfenScheduleDaySensor(mock_config_entry, "Sunday", 6)
+    mock_coordinator.device.charging_profiles = [WEEKLY_PROFILE]  # Mon + Wed 09:00-10:00 10 A 1ph
+    assert monday.native_value == "09:00–10:00 (2.3 kW)"
+    assert sunday.native_value == "No schedule"

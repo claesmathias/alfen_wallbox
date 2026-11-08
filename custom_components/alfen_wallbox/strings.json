@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Add charging profile",
-            "description": "Adds a charging schedule timeslot to the wallbox.",
+            "name": "Add charging time slot",
+            "description": "Adds a time slot to the weekly charging schedule (Eve Connect compatible). Existing slots are kept; overlapping slots are rejected.",
             "fields": {
                 "entity_id": {
                     "name": "Entity",
@@ -201,7 +201,7 @@
                 },
                 "max_current": {
                     "name": "Max current",
-                    "description": "Maximum charging current in Amperes (1-32A)."
+                    "description": "Maximum charging current in amperes."
                 },
                 "recurrency": {
                     "name": "Recurrence",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Days",
                     "description": "Days of the week for WEEKLY recurrence."
+                },
+                "max_power": {
+                    "name": "Max power",
+                    "description": "Maximum power in kW (alternative to max current)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entity",
                     "description": "The wallbox entity to configure."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Set schedule day",
+            "description": "Replaces all charging time slots of one weekday (Eve Connect compatible). An empty list clears the day.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to configure."
+                },
+                "day": {
+                    "name": "Day",
+                    "description": "Weekday to configure."
+                },
+                "timeslots": {
+                    "name": "Time slots",
+                    "description": "List of slots with start and end (HH:MM) and max_power (kW) or max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Clear charging schedule",
+            "description": "Removes the schedule time slots of the given days, or the whole schedule when no days are given. Max power, boost and pause are kept.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to configure."
+                },
+                "days": {
+                    "name": "Days",
+                    "description": "Weekdays to clear (default: all)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Set maximum charging power",
+            "description": "Sets the preferred maximum charging power in kW, shared with the Eve Connect app.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entity",
+                    "description": "The wallbox entity to configure."
+                },
+                "power": {
+                    "name": "Power",
+                    "description": "Maximum charging power in kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Solar power"
+            },
+            "charging_status": {
+                "name": "Charging status"
+            },
+            "charging_limited_by": {
+                "name": "Charging limited by"
+            },
+            "session_energy": {
+                "name": "Session energy"
+            },
+            "session_duration": {
+                "name": "Session duration"
+            },
+            "session_max_power": {
+                "name": "Session max power"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "API login status"
+            },
+            "charging_restricted": {
+                "name": "Charging restricted"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Heartbeat interval"
+            },
+            "max_charging_power": {
+                "name": "Maximum charging power"
+            },
+            "schedule_slot_power": {
+                "name": "Schedule slot power"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Display language"
+            },
+            "charge_control": {
+                "name": "Charge control"
+            },
+            "schedule_slot_days": {
+                "name": "Schedule slot days"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Phase switching"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Solar charging schedule"
             },
             "dp_light_auto_dim": {
                 "name": "Display auto dim"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy enabled"
+            },
+            "charging_schedule_enabled": {
+                "name": "Charging schedule"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Resume charging"
+            },
+            "add_schedule_slot": {
+                "name": "Add schedule slot"
+            },
+            "clear_schedule_days": {
+                "name": "Clear schedule days"
+            },
+            "replace_schedule_slots": {
+                "name": "Replace schedule slots"
+            },
+            "export_charging_history": {
+                "name": "Export charging history"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Proxy password"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Schedule slot start"
+            },
+            "schedule_slot_end": {
+                "name": "Schedule slot end"
             }
         }
     },

@@ -75,6 +75,21 @@
             },
             "solar_power": {
                 "default": "mdi:solar-power"
+            },
+            "charging_status": {
+                "default": "mdi:ev-station"
+            },
+            "charging_limited_by": {
+                "default": "mdi:speedometer-slow"
+            },
+            "session_energy": {
+                "default": "mdi:battery-charging"
+            },
+            "session_duration": {
+                "default": "mdi:timer-outline"
+            },
+            "session_max_power": {
+                "default": "mdi:flash"
             }
         },
         "binary_sensor": {
@@ -107,6 +122,9 @@
             },
             "https_api_login_status": {
                 "default": "mdi:connection"
+            },
+            "charging_restricted": {
+                "default": "mdi:speedometer-slow"
             }
         },
         "number": {
@@ -133,6 +151,12 @@
             },
             "heartbeat_interval": {
                 "default": "mdi:heart-pulse"
+            },
+            "max_charging_power": {
+                "default": "mdi:speedometer"
+            },
+            "schedule_slot_power": {
+                "default": "mdi:flash"
             }
         },
         "select": {
@@ -150,14 +174,17 @@
             },
             "display_language": {
                 "default": "mdi:translate"
+            },
+            "charge_control": {
+                "default": "mdi:ev-station"
+            },
+            "schedule_slot_days": {
+                "default": "mdi:calendar-week"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "default": "mdi:swap-horizontal"
-            },
-            "lb_solar_charging_schedule": {
-                "default": "mdi:calendar-sync"
             },
             "dp_light_auto_dim": {
                 "default": "mdi:brightness-auto"
@@ -173,6 +200,9 @@
             },
             "proxy_enabled": {
                 "default": "mdi:server-network"
+            },
+            "charging_schedule_enabled": {
+                "default": "mdi:calendar-clock"
             }
         },
         "button": {
@@ -208,6 +238,18 @@
             },
             "resume_charging": {
                 "default": "mdi:play-circle"
+            },
+            "add_schedule_slot": {
+                "default": "mdi:calendar-plus"
+            },
+            "clear_schedule_days": {
+                "default": "mdi:calendar-minus"
+            },
+            "replace_schedule_slots": {
+                "default": "mdi:calendar-edit"
+            },
+            "export_charging_history": {
+                "default": "mdi:file-export"
             }
         },
         "text": {
@@ -222,6 +264,14 @@
             },
             "proxy_password": {
                 "default": "mdi:form-textbox-password"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "default": "mdi:clock-start"
+            },
+            "schedule_slot_end": {
+                "default": "mdi:clock-end"
             }
         }
     },
@@ -238,6 +288,9 @@
         "get_transactions": "mdi:history",
         "get_charging_profiles": "mdi:calendar-clock",
         "add_charging_profile": "mdi:calendar-plus",
-        "clear_charging_profiles": "mdi:calendar-remove"
+        "clear_charging_profiles": "mdi:calendar-remove",
+        "set_schedule_day": "mdi:calendar-edit",
+        "clear_charging_schedule": "mdi:calendar-remove",
+        "set_max_power": "mdi:speedometer"
     }
 }

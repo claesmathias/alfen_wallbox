@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Laadprofiel toevoegen",
-            "description": "Voegt een laadschema-tijdslot toe aan de wallbox.",
+            "name": "Laadtijdslot toevoegen",
+            "description": "Voegt een tijdslot toe aan het wekelijkse laadschema (compatibel met Eve Connect). Bestaande sloten blijven behouden; overlappende sloten worden geweigerd.",
             "fields": {
                 "entity_id": {
                     "name": "Entiteit",
@@ -200,8 +200,8 @@
                     "description": "Eindtijd voor het laadtijdslot (UU:MM)."
                 },
                 "max_current": {
-                    "name": "Maximale stroom",
-                    "description": "Maximale laadstroom in Ampère (1-32A)."
+                    "name": "Max. stroom",
+                    "description": "Maximale laadstroom in ampère."
                 },
                 "recurrency": {
                     "name": "Herhaling",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Dagen",
                     "description": "Dagen van de week voor WEKELIJKSE herhaling."
+                },
+                "max_power": {
+                    "name": "Max. vermogen",
+                    "description": "Maximaal vermogen in kW (alternatief voor max. stroom)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entiteit",
                     "description": "De wallbox-entiteit om te configureren."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Schemadag instellen",
+            "description": "Vervangt alle laadtijdsloten van één weekdag (compatibel met Eve Connect). Een lege lijst wist de dag.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entiteit",
+                    "description": "De laadpaal-entiteit om te configureren."
+                },
+                "day": {
+                    "name": "Dag",
+                    "description": "Weekdag om te configureren."
+                },
+                "timeslots": {
+                    "name": "Tijdsloten",
+                    "description": "Lijst met sloten met start en einde (UU:MM) en max_power (kW) of max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Laadschema wissen",
+            "description": "Verwijdert de tijdsloten van de opgegeven dagen, of het hele schema als er geen dagen zijn opgegeven. Max. vermogen, boost en pauze blijven behouden.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entiteit",
+                    "description": "De laadpaal-entiteit om te configureren."
+                },
+                "days": {
+                    "name": "Dagen",
+                    "description": "Te wissen weekdagen (standaard: alle)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Maximaal laadvermogen instellen",
+            "description": "Stelt het gewenste maximale laadvermogen in kW in, gedeeld met de Eve Connect-app.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entiteit",
+                    "description": "De laadpaal-entiteit om te configureren."
+                },
+                "power": {
+                    "name": "Vermogen",
+                    "description": "Maximaal laadvermogen in kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Zonnestroom"
+            },
+            "charging_status": {
+                "name": "Laadstatus"
+            },
+            "charging_limited_by": {
+                "name": "Laden beperkt door"
+            },
+            "session_energy": {
+                "name": "Sessie-energie"
+            },
+            "session_duration": {
+                "name": "Sessieduur"
+            },
+            "session_max_power": {
+                "name": "Sessie max. vermogen"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "API-inlogstatus"
+            },
+            "charging_restricted": {
+                "name": "Laden beperkt"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Heartbeat-interval"
+            },
+            "max_charging_power": {
+                "name": "Maximaal laadvermogen"
+            },
+            "schedule_slot_power": {
+                "name": "Vermogen tijdslot"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Display taal"
+            },
+            "charge_control": {
+                "name": "Laadbediening"
+            },
+            "schedule_slot_days": {
+                "name": "Dagen tijdslot"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Fasewisseling"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Zonne laadschema"
             },
             "dp_light_auto_dim": {
                 "name": "Display auto dimmen"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy ingeschakeld"
+            },
+            "charging_schedule_enabled": {
+                "name": "Laadschema"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Laden hervatten"
+            },
+            "add_schedule_slot": {
+                "name": "Tijdslot toevoegen"
+            },
+            "clear_schedule_days": {
+                "name": "Dagen van schema wissen"
+            },
+            "replace_schedule_slots": {
+                "name": "Tijdsloten vervangen"
+            },
+            "export_charging_history": {
+                "name": "Laadgeschiedenis exporteren"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Proxy wachtwoord"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Start tijdslot"
+            },
+            "schedule_slot_end": {
+                "name": "Einde tijdslot"
             }
         }
     },

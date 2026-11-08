@@ -2,6 +2,103 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.0] - 2026-11-08
+
+Compared against the official **Eve Connect 1.5.4** (end-user) and **MyEve 2.3.1**
+(installer) Android apps. Charge control, maximum power and the schedule now use
+exactly the same charging profiles as Eve Connect, so the app and Home Assistant
+show and control the same state.
+
+### Added
+
+- **Eve Connect dashboard** — `dashboards/alfen_wallbox.yaml`: Home, Power, Schedule,
+  Insights and Settings tabs built only from core cards (HA 2024.8+)
+- **Charge Control select** (`Charging` / `Paused` / `Boost`) — the app's home-screen
+  control, with `boost_ends_at` attribute
+- **Maximum Charging Power** number (kW) — the app's Power-tab slider, stored as the
+  app's max-power profile; kW→A conversion uses the active phases like the app
+- **Charging Schedule switch** — the app's "Apply schedule" toggle (charge only inside
+  time slots); attributes list the slots per day
+- **Solar / grid split** — Solar Charging Power, Grid Charging Power, Green Share (%) and
+  Session Green Share (%), calculated from the smart meter (`5221_16`) like the Eve Connect
+  home screen; shown on the dashboard's home tab while a solar mode is active
+- **Charging history summary** — Charged This Month / Last Month / This Year / Total and
+  Last Charging Session sensors
+- **CSV / JSON export** — the Export Charging History button posts a Home Assistant
+  notification with signed CSV and JSON download links (valid 1 hour, authenticated view,
+  nothing written to the public `www` folder)
+- **Charging history is saved** in Home Assistant's storage
+  (`.storage/alfen_wallbox.<entry>.transactions`, up to 5000 sessions) and restored at
+  startup; "Load history" runs in the background with progress and only reads new log
+  entries after the first time
+- **Editable Charging Schedule calendar** — create, edit and delete time slots in Home
+  Assistant's native calendar dialog. Identical slots on several days are one repeating
+  series; "repeat daily/weekly" picks the days, power goes in the title (`7.4 kW` /
+  `16 A`), "this event" edits one weekday and "this and following" the whole series
+- **Schedule editor entities** — `Schedule Slot Start/End` (new `time` platform),
+  `Schedule Slot Power`, `Schedule Slot Days`, plus `Add Schedule Slot`,
+  `Replace Schedule Slots` and `Clear Schedule Days` buttons, so time slots can be edited
+  from a dashboard; selecting days loads their current slot into the editor
+- **Charging Status** sensor with the app's status messages (incl. paused, boost and
+  solar comfort/green), **Charging Limited By** sensor and **Charging Restricted**
+  binary sensor (property `218F_1`, grouped like the app's alert)
+- **Session Energy / Duration / Max Power** sensors (the app's session tile)
+- Services `set_schedule_day`, `clear_charging_schedule` and `set_max_power`;
+  `add_charging_profile` accepts `max_power` (kW)
+- Charging profiles included in diagnostics
+
+### Changed
+
+- **Boost / Pause / Resume use the Eve Connect protocol**: boost = profile
+  `-19571004` (Absolute, 3 h, stack 1000), pause = `-12122008` (limit 0, stack 1000),
+  wrapped as `{"connectorId": 0, "csChargingProfiles": …}` with purpose
+  `ChargingStationExternalConstraints`. Boost also sets the solar override (`3280_4`)
+  when the wallbox has it, as the app does. Profiles written by ≤ 3.5.5
+  (`-19930829` / `-19930830`) are cleaned up automatically
+- **`add_charging_profile` writes Eve Connect day profiles** (`234202401`–`234202407`)
+  and merges with existing slots (max 7 per day, overlaps rejected, slots past midnight
+  split over two days) instead of overwriting profile `-19930828`
+- **Clear Charging Schedule button** now removes only the schedule; maximum power,
+  boost and pause are kept. The `clear_charging_profiles` service still clears all
+- Calendar, schedule sensors and Charging Window Active use the cached profiles (no
+  wallbox requests when opening the calendar) and show **all** slots of a day
+  (previously only the first)
+- Configuration entities (OCPP, WiFi, proxy, pricing, installer limits, …) moved to
+  the device's *Configuration* section; login/logout/force-update are *Diagnostic*
+- Fixed device classes: solar comfort level is power (W), green share / brightness
+  have none, imbalance current is current, random delay is a duration
+- Reboot button uses the restart device class
+
+### Fixed
+
+- **Schedules added via Home Assistant overwrote the app's maximum-power profile** and
+  were invisible in the calendar (`-19930828` was used for schedules but skipped when
+  reading)
+- **Clear profile by ID used `?clear=cpid=<id>`**; the wallbox API (as used by the app)
+  expects `?clear=<id>`, so Stop Boost / Resume did not remove their profiles
+- **Transaction history scan stopped early** when status-notification records (`sn3`)
+  appeared between transactions; `AP;…;` and `(null)` fragments are now stripped like
+  the app does, keeping RFID tags parsed correctly
+- Schedule writes were rejected by the wallbox (HTTP 400) because the first period did
+  not start at 0; requests now mirror the app's layout (empty periods at 0 and 1)
+- Profile writes failed silently: they now report the wallbox's error, and re-login and
+  retry when the wallbox drops the session after a burst of writes
+- Slot power is capped at the station maximum current (`2062_0`)
+- **Charging history fetch looped endlessly** (1,000+ requests, blocking updates and possibly
+  hanging the wallbox): log offsets were capped at 500,000 while real wallboxes jump to
+  ~1.5M. The cap is raised, a fetch stops when the offset does not advance, a scheduled
+  fetch makes at most 100 requests per update cycle, and "Load history" reads the rest in
+  background batches
+- Profile IDs reported as unsigned 32-bit numbers (e.g. `4275036468`) are normalised
+- Eve Connect's boost profile was shown as a daily event in the calendar
+- Duplicated condition in the static load-balancing license check; typo in main state 47
+
+### Removed
+
+- **"Solar Charging Schedule Enabled" switch** — it toggled `3280_1`, which is the
+  three-way solar charging *mode* (Disable/Comfort/Green) already exposed by the
+  *Solar Charging Mode* select. The obsolete entity is removed from the registry
+
 ## [3.5.5] - 2026-06-05
 
 ### Fixed

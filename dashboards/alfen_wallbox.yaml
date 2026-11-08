@@ -1,0 +1,542 @@
+# Alfen Wallbox dashboard — same functionality as the Eve Connect app
+#
+# Tabs: Home · Power · Schedule · Insights · Settings
+# Uses only built-in cards (no HACS frontend cards needed). Requires Home
+# Assistant 2024.8 or newer (sections views and tile card features).
+#
+# Installation
+#   1. Settings → Dashboards → Add dashboard → "New dashboard from scratch".
+#   2. Open it, ⋮ → Edit dashboard → ⋮ → Raw configuration editor.
+#   3. Paste this file.
+#   4. Entity IDs assume the wallbox was named "Alfen Wallbox" during setup.
+#      If you used another name, find/replace "alfen_wallbox_" with your own
+#      prefix (e.g. "garage_" for a wallbox named "Garage").
+#
+# Notes
+#   - Insights needs transaction history: either enable the "transactions"
+#     category in the integration options, or press "Force Fetch Transaction".
+#   - "Maximum charging power", Boost, Pause and the schedule are stored on the
+#     wallbox in the same format as Eve Connect, so both stay in sync.
+
+title: Alfen Wallbox
+views:
+  # ------------------------------------------------------------------ HOME
+  - title: Home
+    path: home
+    icon: mdi:ev-station
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: My charging station
+            icon: mdi:ev-station
+            badges:
+              - type: entity
+                entity: binary_sensor.alfen_wallbox_https_api_login_status
+                show_state: false
+          - type: markdown
+            text_only: true
+            content: >-
+              ## {{ states('sensor.alfen_wallbox_charging_status') }}
+
+              {% set p = states('sensor.alfen_wallbox_active_power_total_socket_1') | float(0) %}
+              {% if p > 50 %}⚡ **{{ (p / 1000) | round(1) }} kW** ·{% endif %}
+              {%- set g = states('sensor.alfen_wallbox_green_share') %}
+              {%- if p > 50 and g not in ['unknown', 'unavailable', 'none', ''] %}
+              ☀️ **{{ g | float | round(0) | int }} % solar** · 🏭 {{ 100 - (g | float | round(0) | int) }} % grid ·
+              {%- endif %}
+              Mode: **{{ states('select.alfen_wallbox_charge_control') }}**
+              {%- set ends = state_attr('select.alfen_wallbox_charge_control', 'boost_ends_at') %}
+              {%- if ends %} · boost until {{ as_timestamp(ends) | timestamp_custom('%H:%M') }}{% endif %}
+          - type: tile
+            entity: select.alfen_wallbox_charge_control
+            name: Charge control
+            vertical: false
+            features:
+              - type: select-options
+          - type: button
+            entity: button.alfen_wallbox_enable_boost_mode
+            name: Boost
+            icon: mdi:lightning-bolt
+            show_state: false
+            layout_options:
+              grid_columns: 1
+              grid_rows: 2
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.alfen_wallbox_enable_boost_mode
+          - type: button
+            entity: button.alfen_wallbox_pause_charging
+            name: Pause
+            icon: mdi:pause
+            show_state: false
+            layout_options:
+              grid_columns: 1
+              grid_rows: 2
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.alfen_wallbox_pause_charging
+          - type: button
+            entity: button.alfen_wallbox_resume_charging
+            name: Charge
+            icon: mdi:play
+            show_state: false
+            layout_options:
+              grid_columns: 1
+              grid_rows: 2
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.alfen_wallbox_resume_charging
+          - type: tile
+            entity: binary_sensor.alfen_wallbox_charging_restricted
+            name: Charging restricted
+            color: orange
+            visibility:
+              - condition: state
+                entity: binary_sensor.alfen_wallbox_charging_restricted
+                state: "on"
+          - type: markdown
+            visibility:
+              - condition: state
+                entity: binary_sensor.alfen_wallbox_charging_restricted
+                state: "on"
+            content: >-
+              {% set r = state_attr('binary_sensor.alfen_wallbox_charging_restricted', 'reason') %}
+              {% if r == 'load_balancing' %}
+              Charging may be slower because active load balancing with the smart meter is managing high demand.
+              {% elif r == 'vehicle' %}
+              Charging is less efficient due to communication problems with the vehicle (cable, socket or vehicle).
+              {% else %}
+              Charging may be slower due to technical or installation constraints. If this persists, contact your installer.
+              {% endif %}
+              _Limited by: {{ states('sensor.alfen_wallbox_charging_limited_by') }}_
+          - type: tile
+            entity: sensor.alfen_wallbox_solar_charging_power
+            name: Solar
+            color: amber
+            visibility: &solar_on
+              - condition: state
+                entity: select.alfen_wallbox_solar_charging_mode
+                state_not: Disable
+          - type: tile
+            entity: sensor.alfen_wallbox_grid_charging_power
+            name: Grid
+            color: blue-grey
+            visibility: *solar_on
+          - type: tile
+            entity: sensor.alfen_wallbox_green_share
+            name: Green share
+            color: green
+            visibility: *solar_on
+          - type: tile
+            entity: sensor.alfen_wallbox_session_green_share
+            name: Session green
+            color: green
+            visibility: *solar_on
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Session
+            icon: mdi:car-electric
+          - type: tile
+            entity: sensor.alfen_wallbox_session_energy
+            name: Charged
+          - type: tile
+            entity: sensor.alfen_wallbox_session_duration
+            name: Duration
+          - type: tile
+            entity: sensor.alfen_wallbox_active_power_total_socket_1
+            name: Power
+          - type: tile
+            entity: sensor.alfen_wallbox_session_max_power
+            name: Max power
+          - type: gauge
+            entity: sensor.alfen_wallbox_active_power_total_socket_1
+            name: Charging power
+            unit: W
+            min: 0
+            max: 22000
+            needle: true
+            severity:
+              green: 0
+              yellow: 11000
+              red: 20000
+          - type: history-graph
+            title: Last 24 hours
+            hours_to_show: 24
+            entities:
+              - entity: sensor.alfen_wallbox_active_power_total_socket_1
+                name: Charging
+              - entity: sensor.alfen_wallbox_smart_meter_active_power_total
+                name: Home (smart meter)
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Live measurements
+            icon: mdi:sine-wave
+          - type: tile
+            entity: sensor.alfen_wallbox_current_l1_socket_1
+            name: L1
+          - type: tile
+            entity: sensor.alfen_wallbox_current_l2_socket_1
+            name: L2
+          - type: tile
+            entity: sensor.alfen_wallbox_current_l3_socket_1
+            name: L3
+          - type: tile
+            entity: sensor.alfen_wallbox_voltage_l1n_socket_1
+            name: Voltage L1
+          - type: tile
+            entity: sensor.alfen_wallbox_voltage_l2n_socket_1
+            name: Voltage L2
+          - type: tile
+            entity: sensor.alfen_wallbox_voltage_l3n_socket_1
+            name: Voltage L3
+          - type: tile
+            entity: sensor.alfen_wallbox_temperature
+            name: Temperature
+          - type: tile
+            entity: sensor.alfen_wallbox_meter_reading_socket_1
+            name: Meter
+
+  # ----------------------------------------------------------------- POWER
+  - title: Power
+    path: power
+    icon: mdi:speedometer
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Maximum power
+            icon: mdi:speedometer
+          - type: tile
+            entity: number.alfen_wallbox_maximum_charging_power
+            name: Preferred maximum power
+            features:
+              - type: numeric-input
+                style: slider
+            layout_options:
+              grid_columns: full
+          - type: markdown
+            text_only: true
+            content: >-
+              {% if is_state('select.alfen_wallbox_charge_control', 'Boost') %}
+              ⚡ Boost mode is active, temporarily overriding the power settings.
+              {% elif not is_state('select.alfen_wallbox_solar_charging_mode', 'Disable') %}
+              ☀️ Solar charging is set as preferred way of charging.
+              {% else %}
+              Choose the preferred maximum power for charging.
+              {% endif %}
+      - type: grid
+        cards:
+          - type: heading
+            heading: Solar charging
+            icon: mdi:solar-power
+          - type: tile
+            entity: select.alfen_wallbox_solar_charging_mode
+            name: Solar mode
+            features:
+              - type: select-options
+            layout_options:
+              grid_columns: full
+          - type: markdown
+            text_only: true
+            content: >-
+              **Green** — only charge when sufficient surplus solar power is available.<br>
+              **Comfort** — always charge at the comfort level, topped up with solar power.<br>
+              **Solar override** — ignore the solar mode and charge at full power (Boost turns it on).
+          - type: tile
+            entity: number.alfen_wallbox_solar_comfort_level
+            name: Comfort level
+            features:
+              - type: numeric-input
+                style: slider
+            layout_options:
+              grid_columns: full
+            visibility:
+              - condition: state
+                entity: select.alfen_wallbox_solar_charging_mode
+                state: Comfort
+          - type: tile
+            entity: number.alfen_wallbox_solar_green_share
+            name: Green share
+            features:
+              - type: numeric-input
+                style: slider
+            layout_options:
+              grid_columns: full
+            visibility:
+              - condition: state
+                entity: select.alfen_wallbox_solar_charging_mode
+                state: Green
+          - type: tile
+            entity: switch.alfen_wallbox_solar_charging_boost_socket_1
+            name: Solar override
+            visibility:
+              - condition: state
+                entity: select.alfen_wallbox_solar_charging_mode
+                state_not: Disable
+
+  # -------------------------------------------------------------- SCHEDULE
+  - title: Schedule
+    path: schedule
+    icon: mdi:calendar-clock
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Charging schedule
+            icon: mdi:calendar-clock
+            badges:
+              - type: button
+                icon: mdi:calendar-month
+                text: Calendar
+                tap_action:
+                  action: navigate
+                  navigation_path: /calendar
+          - type: tile
+            entity: switch.alfen_wallbox_charging_schedule
+            name: Only charge inside time slots
+          - type: tile
+            entity: binary_sensor.alfen_wallbox_charging_window_active
+            name: Time slot active now
+          - type: entities
+            title: Time slots per day
+            state_color: false
+            grid_options:
+              columns: full
+            entities:
+              - entity: sensor.alfen_wallbox_schedule_monday
+                name: Monday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_tuesday
+                name: Tuesday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_wednesday
+                name: Wednesday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_thursday
+                name: Thursday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_friday
+                name: Friday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_saturday
+                name: Saturday
+                icon: mdi:calendar-today
+              - entity: sensor.alfen_wallbox_schedule_sunday
+                name: Sunday
+                icon: mdi:calendar-today
+      - type: grid
+        cards:
+          - type: heading
+            heading: Edit time slots
+            icon: mdi:calendar-edit
+          - type: entities
+            show_header_toggle: false
+            grid_options:
+              columns: full
+            entities:
+              - entity: select.alfen_wallbox_schedule_slot_days
+                name: Days
+                icon: mdi:calendar-week
+              - entity: time.alfen_wallbox_schedule_slot_start
+                name: From
+              - entity: time.alfen_wallbox_schedule_slot_end
+                name: To
+              - entity: number.alfen_wallbox_schedule_slot_power
+                name: Power
+            footer:
+              type: buttons
+              entities:
+                - entity: button.alfen_wallbox_replace_schedule_slots
+                  name: Save
+                  icon: mdi:content-save
+                  tap_action:
+                    action: perform-action
+                    perform_action: button.press
+                    target:
+                      entity_id: button.alfen_wallbox_replace_schedule_slots
+                - entity: button.alfen_wallbox_add_schedule_slot
+                  name: Add extra slot
+                  icon: mdi:plus
+                  tap_action:
+                    action: perform-action
+                    perform_action: button.press
+                    target:
+                      entity_id: button.alfen_wallbox_add_schedule_slot
+                - entity: button.alfen_wallbox_clear_schedule_days
+                  name: Clear
+                  icon: mdi:delete
+                  tap_action:
+                    action: perform-action
+                    perform_action: button.press
+                    target:
+                      entity_id: button.alfen_wallbox_clear_schedule_days
+                    confirmation:
+                      text: Delete all time slots of the selected days?
+          - type: markdown
+            text_only: true
+            content: >-
+              Pick the **days** — their current slot is loaded — adjust **From**,
+              **To** and **Power**, then **Save** (replaces the slots of those days).
+              **Add extra slot** keeps the existing slots (max. 7 per day, no overlaps).
+              An end time before the start time continues into the next day
+              (e.g. 22:00 → 06:00).
+
+  # -------------------------------------------------------------- INSIGHTS
+  - title: Insights
+    path: insights
+    icon: mdi:chart-bar
+    type: sections
+    max_columns: 1
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Charging history
+            icon: mdi:history
+            badges:
+              - type: entity
+                entity: sensor.alfen_wallbox_insights
+              - type: button
+                icon: mdi:database-refresh
+                text: Load history
+                tap_action:
+                  action: perform-action
+                  perform_action: button.press
+                  target:
+                    entity_id: button.alfen_wallbox_force_fetch_transaction
+          - type: entities
+            title: Charged energy
+            state_color: false
+            entities:
+              - entity: sensor.alfen_wallbox_charged_this_month
+                name: This month
+                icon: mdi:calendar-month
+              - entity: sensor.alfen_wallbox_charged_last_month
+                name: Last month
+                icon: mdi:calendar-arrow-left
+              - entity: sensor.alfen_wallbox_charged_this_year
+                name: This year
+                icon: mdi:calendar-blank-multiple
+              - entity: sensor.alfen_wallbox_charged_total
+                name: Total (saved history)
+                icon: mdi:sigma
+              - type: divider
+              - entity: sensor.alfen_wallbox_last_charging_session
+                name: Last session
+                icon: mdi:car-electric
+          - type: markdown
+            content: |-
+              {% set tx = state_attr('sensor.alfen_wallbox_insights', 'transactions') or [] %}
+              {% set until = state_attr('sensor.alfen_wallbox_insights', 'loaded_until') %}
+              {% if state_attr('sensor.alfen_wallbox_insights', 'loading') %}
+              <ha-alert alert-type="info">⏳ Loading charging history from the wallbox… read up to
+              <b>{{ as_timestamp(until) | timestamp_custom('%d %b %Y') if until else 'the start' }}</b>.
+              Sessions appear below as they are found.</ha-alert>
+
+              {% endif %}
+              {% if tx | count == 0 and state_attr('sensor.alfen_wallbox_insights', 'loading') %}
+              {% elif tx | count == 0 %}
+              No charging history loaded yet. Press **Load history** to read the charging
+              sessions from the wallbox (the first time this can take a few minutes; later
+              presses only read what is new). To keep it up to
+              date automatically, enable the *transactions* category in the integration
+              options (Settings → Devices & services → Alfen Wallbox → Configure).
+              {% else %}
+              **{{ tx | count }} charging sessions** saved
+              {%- set until = state_attr('sensor.alfen_wallbox_insights', 'loaded_until') %}
+              {%- if until %} (log read up to {{ as_timestamp(until) | timestamp_custom('%d %b %Y %H:%M') }}){% endif %}.
+              {% endif %}
+          - type: button
+            entity: button.alfen_wallbox_export_charging_history
+            name: Export charging history (CSV / JSON)
+            icon: mdi:file-export
+            show_state: false
+            grid_options:
+              columns: full
+              rows: 1
+            layout_options:
+              grid_columns: full
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.alfen_wallbox_export_charging_history
+          - type: markdown
+            text_only: true
+            content: >-
+              After pressing export, the download links (CSV and JSON, valid for one
+              hour) appear in the **Notifications** in the sidebar.
+
+  # -------------------------------------------------------------- SETTINGS
+  - title: Settings
+    path: settings
+    icon: mdi:cog
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Charging station
+            icon: mdi:ev-station
+          - type: entities
+            entities:
+              - entity: sensor.alfen_wallbox_model
+                name: Model
+              - entity: sensor.alfen_wallbox_object_number
+                name: Serial
+              - entity: sensor.alfen_wallbox_firmware_version
+                name: Firmware
+              - entity: sensor.alfen_wallbox_number_of_sockets
+                name: Sockets
+              - entity: sensor.alfen_wallbox_connector_1_max_allowed_of_phases
+                name: Phases
+              - entity: switch.alfen_wallbox_load_balancing_enable_phase_switching
+                name: Phase switching
+              - entity: number.alfen_wallbox_power_connector_max_current_socket_1
+                name: Socket max current
+              - entity: sensor.alfen_wallbox_main_state_socket_1
+                name: Main state
+              - entity: sensor.alfen_wallbox_display_error_number_socket_1
+                name: Display message
+              - entity: sensor.alfen_wallbox_system_uptime
+                name: Uptime
+              - entity: sensor.alfen_wallbox_wifi_status
+                name: WiFi
+      - type: grid
+        cards:
+          - type: heading
+            heading: Connection
+            icon: mdi:lan-connect
+          - type: entities
+            entities:
+              - entity: binary_sensor.alfen_wallbox_https_api_login_status
+                name: Connected to wallbox
+              - type: section
+                label: Only one client can be logged in. Log out here before using the Eve Connect app locally.
+              - entity: button.alfen_wallbox_https_api_logout
+                name: Log out (use the app)
+              - entity: button.alfen_wallbox_https_api_login
+                name: Log in again
+              - type: divider
+              - entity: button.alfen_wallbox_refresh_charging_schedule
+                name: Refresh schedule from wallbox
+              - entity: button.alfen_wallbox_reboot_wallbox
+                name: Reboot charging station

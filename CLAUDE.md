@@ -33,6 +33,33 @@ This is a Home Assistant custom integration for Alfen EV Wallboxes. It enables l
   - During timeouts (20-30 seconds), all sensors continue showing their last successfully fetched values instead of becoming unavailable
   - This prevents dashboard gaps and provides better user experience during transient network issues
 
+### Charging Profiles — Eve Connect protocol (since 3.6.0)
+
+Charge control, maximum power and the weekly schedule mirror the official Eve Connect
+app (reverse engineered from `com.alfen.maple` 1.5.4) so app and HA share state.
+Pure helpers live in [charging.py](custom_components/alfen_wallbox/charging.py) (no HA
+imports, unit tested in `tests/test_charging.py`); `AlfenDevice` wraps them.
+
+| Profile ID | Purpose | Kind / stack |
+|---|---|---|
+| `-19930828` | Preferred max power (Power tab) | Relative, stack 0 |
+| `-19571004` | Boost (3 h, `startSchedule` = wallbox clock `2059_0`) | Absolute, stack 1000 |
+| `-12122008` | Pause (limit 0) | Relative, stack 1000 |
+| `234202401`…`234202407` | Schedule Mon…Sun (anchor `2024-04-0N` local midnight) | Recurring Weekly, stack `11 - day` |
+| `234202408` | "Apply schedule" toggle (limit 0 outside slots) | Relative, stack 1 |
+
+- Requests: `POST /api/chargingprofiles?add` with `{"connectorId": 0, "csChargingProfiles": {...}}`, purpose `ChargingStationExternalConstraints`
+- Clear one profile: `POST /api/chargingprofiles?clear=<id>` (raw ID — **not** `clear=cpid=<id>`)
+- `GET ?cpid=<id>` responses use flat arrays (`startPeriod[]`, `limit[]`, `numberPhases[]`); IDs may come back unsigned (`4275036468`) → `normalize_profile_id()`
+- Boost sets / Pause & Charge clear the solar override `3280_4` — only when that property exists (never queue unknown props, they retry forever)
+- kW→A: `amps = round1(kW*1000/230/phases)`; below 6 A per phase → single phase. Active phases = voltages `2221_3/4/5` > 80 V
+- `device.charging_profiles_by_id` holds everything; `device.charging_profiles` only schedule profiles (calendar/sensors). Refreshed every ~5 min and right after each change (`_state_changed_callback` → `coordinator.async_update_listeners`)
+- Legacy IDs `-19930829` / `-19930830` (≤ 3.5.5 boost/pause) are still recognised and cleared
+
+Other app-derived data: socket main state messages (`2501_1`), limiting factor `218F_1`
+(single flag; groups vehicle / load balancing), solar mode `3280_1` (0 Disabled,
+1 Comfort, 2 Green). The dashboard is in [dashboards/alfen_wallbox.yaml](dashboards/alfen_wallbox.yaml).
+
 ### Data Model
 
 The wallbox organizes properties into **categories** that can be selectively refreshed:

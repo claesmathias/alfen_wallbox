@@ -60,6 +60,38 @@ def mock_alfen_device_fixture():
         mock_device.stop_boost_mode = AsyncMock()
         mock_device.pause_charging = AsyncMock()
         mock_device.resume_charging = AsyncMock()
+        # Charge control / schedule / session API (Eve Connect features)
+        mock_device.charging_profiles = []
+        mock_device.charging_profiles_by_id = {}
+        mock_device.transactions = []
+        mock_device.latest_tag = None
+        mock_device.max_allowed_phases = 3
+        mock_device.session = {
+            "active": False,
+            "start": None,
+            "end": None,
+            "start_energy_wh": None,
+            "energy_kwh": None,
+            "max_power_w": None,
+        }
+        mock_device.session_duration = None
+        mock_device.charge_control = "charging"
+        mock_device.boost_active = False
+        mock_device.boost_ends_at = None
+        mock_device.pause_active = False
+        mock_device.schedule_enabled = False
+        mock_device.active_phases = 3
+        mock_device.min_station_power = 1.4
+        mock_device.max_station_power = 22.1
+        mock_device.max_power = None
+        mock_device.get_schedule = MagicMock(return_value={day: [] for day in range(7)})
+        mock_device.charging_split = (0.0, 0.0)
+        mock_device.has_smart_meter_power = False
+        mock_device.session_green_share = None
+        mock_device.export_transactions = MagicMock(
+            return_value={"offset": 0, "loaded_until": None, "sessions": []}
+        )
+        mock_device.import_transactions = MagicMock()
         mock_device.keep_logout = False
         mock_device.get_static_properties = False
         mock_device.category_options = ["generic", "states"]

@@ -32,8 +32,8 @@ async def test_select_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 18 select entities (only single socket types)
-    assert len(entities) == 18
+    # 18 property selects + Charge Control + Schedule Slot Days
+    assert len(entities) == 20
     assert entities[0].entity_description.key == "lb_solar_charging_mode"
 
 
@@ -61,8 +61,8 @@ async def test_select_setup_dual_socket(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 19 select entities (18 single + 1 dual)
-    assert len(entities) == 19
+    # 20 single-socket selects + 1 dual-socket select
+    assert len(entities) == 21
 
 
 async def test_select_async_select_option(

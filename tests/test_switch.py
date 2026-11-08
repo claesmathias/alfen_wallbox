@@ -27,10 +27,14 @@ async def test_switch_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 14 switch entities
+    # 13 property switches + the "Charging Schedule" (apply schedule) switch.
+    # The 3280_1 "Solar Charging Schedule Enabled" switch was removed in 3.6.0:
+    # 3280_1 is the 3-way solar mode, exposed by the Solar Charging Mode select.
     assert len(entities) == 14
     assert entities[0].entity_description.key == "lb_enable_phase_switching"
-    assert entities[2].entity_description.key == "lb_solar_charging_schedule"
+    keys = [e.entity_description.key for e in entities[:-1]]
+    assert "lb_solar_charging_schedule" not in keys
+    assert entities[-1].unique_id.endswith("_charging_schedule_enabled")
 
 
 async def test_switch_initialization(

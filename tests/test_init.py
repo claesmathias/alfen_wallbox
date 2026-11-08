@@ -132,6 +132,7 @@ async def test_platforms_loaded(
             Platform.SENSOR,
             Platform.SWITCH,
             Platform.TEXT,
+            Platform.TIME,
         ]
 
         assert set(platforms_arg) == set(expected_platforms)

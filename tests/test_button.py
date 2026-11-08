@@ -27,8 +27,8 @@ async def test_button_setup(
 
     await async_setup_entry(hass, mock_config_entry, add_entities)
 
-    # Should create 12 button entities
-    assert len(entities) == 12
+    # Should create 16 button entities
+    assert len(entities) == 16
     assert entities[0].entity_description.key == "reboot_wallbox"
     assert entities[1].entity_description.key == "auth_logout"
     assert entities[2].entity_description.key == "auth_login"
@@ -41,6 +41,10 @@ async def test_button_setup(
     assert entities[9].entity_description.key == "stop_boost_mode"
     assert entities[10].entity_description.key == "pause_charging"
     assert entities[11].entity_description.key == "resume_charging"
+    assert entities[12].entity_description.key == "add_schedule_slot"
+    assert entities[13].entity_description.key == "replace_schedule_slots"
+    assert entities[14].entity_description.key == "clear_schedule_days"
+    assert entities[15].entity_description.key == "export_charging_history"
 
 
 async def test_button_initialization(

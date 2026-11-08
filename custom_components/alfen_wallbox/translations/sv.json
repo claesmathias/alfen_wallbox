@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Lägg till laddningsprofil",
-            "description": "Lägger till ett laddningsschema-tidsfönster till wallboxen.",
+            "name": "Lägg till laddningsfönster",
+            "description": "Lägger till ett tidsfönster i det veckovisa laddschemat (kompatibelt med Eve Connect). Befintliga fönster behålls; överlappande fönster avvisas.",
             "fields": {
                 "entity_id": {
                     "name": "Enhet",
@@ -200,8 +200,8 @@
                     "description": "Stopptid för laddningstidsfönstret (TT:MM)."
                 },
                 "max_current": {
-                    "name": "Max ström",
-                    "description": "Maximal laddningsström i ampere (1-32A)."
+                    "name": "Maxström",
+                    "description": "Maximal laddström i ampere."
                 },
                 "recurrency": {
                     "name": "Återkommande",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Dagar",
                     "description": "Veckodagar för WEEKLY återkomst."
+                },
+                "max_power": {
+                    "name": "Maxeffekt",
+                    "description": "Maximal effekt i kW (alternativ till maxström)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Enhet",
                     "description": "Wallbox-enheten att konfigurera."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Ställ in schemadag",
+            "description": "Ersätter alla laddningsfönster för en veckodag (kompatibelt med Eve Connect). En tom lista rensar dagen.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Laddboxens entitet som ska konfigureras."
+                },
+                "day": {
+                    "name": "Dag",
+                    "description": "Veckodag som ska konfigureras."
+                },
+                "timeslots": {
+                    "name": "Tidsfönster",
+                    "description": "Lista med fönster med start och slut (HH:MM) och max_power (kW) eller max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Rensa laddschema",
+            "description": "Tar bort tidsfönstren för angivna dagar, eller hela schemat om inga dagar anges. Maxeffekt, boost och paus behålls.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Laddboxens entitet som ska konfigureras."
+                },
+                "days": {
+                    "name": "Dagar",
+                    "description": "Veckodagar att rensa (standard: alla)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Ställ in maximal laddeffekt",
+            "description": "Ställer in önskad maximal laddeffekt i kW, delad med Eve Connect-appen.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Laddboxens entitet som ska konfigureras."
+                },
+                "power": {
+                    "name": "Effekt",
+                    "description": "Maximal laddeffekt i kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Solkraft"
+            },
+            "charging_status": {
+                "name": "Laddstatus"
+            },
+            "charging_limited_by": {
+                "name": "Laddning begränsad av"
+            },
+            "session_energy": {
+                "name": "Sessionsenergi"
+            },
+            "session_duration": {
+                "name": "Sessionstid"
+            },
+            "session_max_power": {
+                "name": "Sessionens maxeffekt"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "API-inloggningsstatus"
+            },
+            "charging_restricted": {
+                "name": "Laddning begränsad"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Heartbeat-intervall"
+            },
+            "max_charging_power": {
+                "name": "Maximal laddeffekt"
+            },
+            "schedule_slot_power": {
+                "name": "Effekt för tidsfönster"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Displayspråk"
+            },
+            "charge_control": {
+                "name": "Laddstyrning"
+            },
+            "schedule_slot_days": {
+                "name": "Dagar för tidsfönster"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Fasväxling"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Solladningsschema"
             },
             "dp_light_auto_dim": {
                 "name": "Display auto-dim"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy aktiverad"
+            },
+            "charging_schedule_enabled": {
+                "name": "Laddschema"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Återuppta laddning"
+            },
+            "add_schedule_slot": {
+                "name": "Lägg till tidsfönster"
+            },
+            "clear_schedule_days": {
+                "name": "Rensa dagar i schemat"
+            },
+            "replace_schedule_slots": {
+                "name": "Ersätt tidsfönster"
+            },
+            "export_charging_history": {
+                "name": "Exportera laddhistorik"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Proxylösenord"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Start för tidsfönster"
+            },
+            "schedule_slot_end": {
+                "name": "Slut för tidsfönster"
             }
         }
     },

@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Aggiungi profilo di ricarica",
-            "description": "Aggiunge uno slot temporale di ricarica alla wallbox.",
+            "name": "Aggiungi fascia di ricarica",
+            "description": "Aggiunge una fascia alla programmazione settimanale (compatibile con Eve Connect). Le fasce esistenti vengono mantenute; quelle sovrapposte vengono rifiutate.",
             "fields": {
                 "entity_id": {
                     "name": "Entità",
@@ -200,8 +200,8 @@
                     "description": "Ora di fine dello slot di ricarica (HH:MM)."
                 },
                 "max_current": {
-                    "name": "Corrente massima",
-                    "description": "Corrente di ricarica massima in Ampere (1-32A)."
+                    "name": "Corrente max",
+                    "description": "Corrente di ricarica massima in ampere."
                 },
                 "recurrency": {
                     "name": "Ricorrenza",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Giorni",
                     "description": "Giorni della settimana per la ricorrenza WEEKLY."
+                },
+                "max_power": {
+                    "name": "Potenza max",
+                    "description": "Potenza massima in kW (alternativa alla corrente max)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entità",
                     "description": "L'entità della wallbox da configurare."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Imposta giorno della programmazione",
+            "description": "Sostituisce tutte le fasce di ricarica di un giorno della settimana (compatibile con Eve Connect). Una lista vuota cancella il giorno.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entità",
+                    "description": "L'entità della wallbox da configurare."
+                },
+                "day": {
+                    "name": "Giorno",
+                    "description": "Giorno della settimana da configurare."
+                },
+                "timeslots": {
+                    "name": "Fasce orarie",
+                    "description": "Elenco di fasce con inizio e fine (HH:MM) e max_power (kW) o max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Cancella programmazione ricarica",
+            "description": "Rimuove le fasce dei giorni indicati, o l'intera programmazione se non sono indicati giorni. Potenza max, boost e pausa vengono mantenuti.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entità",
+                    "description": "L'entità della wallbox da configurare."
+                },
+                "days": {
+                    "name": "Giorni",
+                    "description": "Giorni da cancellare (predefinito: tutti)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Imposta potenza di ricarica massima",
+            "description": "Imposta la potenza di ricarica massima preferita in kW, condivisa con l'app Eve Connect.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entità",
+                    "description": "L'entità della wallbox da configurare."
+                },
+                "power": {
+                    "name": "Potenza",
+                    "description": "Potenza di ricarica massima in kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Potenza solare"
+            },
+            "charging_status": {
+                "name": "Stato di ricarica"
+            },
+            "charging_limited_by": {
+                "name": "Ricarica limitata da"
+            },
+            "session_energy": {
+                "name": "Energia della sessione"
+            },
+            "session_duration": {
+                "name": "Durata della sessione"
+            },
+            "session_max_power": {
+                "name": "Potenza max sessione"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "Stato connessione API"
+            },
+            "charging_restricted": {
+                "name": "Ricarica limitata"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Intervallo heartbeat"
+            },
+            "max_charging_power": {
+                "name": "Potenza di ricarica massima"
+            },
+            "schedule_slot_power": {
+                "name": "Potenza fascia oraria"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Lingua display"
+            },
+            "charge_control": {
+                "name": "Controllo ricarica"
+            },
+            "schedule_slot_days": {
+                "name": "Giorni fascia oraria"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Commutazione fase"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Programma ricarica solare"
             },
             "dp_light_auto_dim": {
                 "name": "Auto-dim display"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy abilitato"
+            },
+            "charging_schedule_enabled": {
+                "name": "Programmazione ricarica"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Riprendi ricarica"
+            },
+            "add_schedule_slot": {
+                "name": "Aggiungi fascia oraria"
+            },
+            "clear_schedule_days": {
+                "name": "Cancella giorni della programmazione"
+            },
+            "replace_schedule_slots": {
+                "name": "Sostituisci fasce orarie"
+            },
+            "export_charging_history": {
+                "name": "Esporta cronologia ricariche"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Password proxy"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Inizio fascia oraria"
+            },
+            "schedule_slot_end": {
+                "name": "Fine fascia oraria"
             }
         }
     },

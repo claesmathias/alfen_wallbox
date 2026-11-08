@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Añadir perfil de carga",
-            "description": "Añade un intervalo de tiempo de carga al wallbox.",
+            "name": "Añadir franja de carga",
+            "description": "Añade una franja a la programación de carga semanal (compatible con Eve Connect). Las franjas existentes se mantienen; las solapadas se rechazan.",
             "fields": {
                 "entity_id": {
                     "name": "Entidad",
@@ -200,8 +200,8 @@
                     "description": "Hora de fin del intervalo de carga (HH:MM)."
                 },
                 "max_current": {
-                    "name": "Corriente máxima",
-                    "description": "Corriente máxima de carga en amperios (1-32A)."
+                    "name": "Corriente máx.",
+                    "description": "Corriente de carga máxima en amperios."
                 },
                 "recurrency": {
                     "name": "Recurrencia",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Días",
                     "description": "Días de la semana para la recurrencia WEEKLY."
+                },
+                "max_power": {
+                    "name": "Potencia máx.",
+                    "description": "Potencia máxima en kW (alternativa a la corriente máx.)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entidad",
                     "description": "La entidad del wallbox a configurar."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Establecer día de la programación",
+            "description": "Reemplaza todas las franjas de carga de un día de la semana (compatible con Eve Connect). Una lista vacía borra el día.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entidad",
+                    "description": "La entidad del cargador a configurar."
+                },
+                "day": {
+                    "name": "Día",
+                    "description": "Día de la semana a configurar."
+                },
+                "timeslots": {
+                    "name": "Franjas",
+                    "description": "Lista de franjas con inicio y fin (HH:MM) y max_power (kW) o max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Borrar programación de carga",
+            "description": "Elimina las franjas de los días indicados, o toda la programación si no se indican días. Se mantienen la potencia máx., el boost y la pausa.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entidad",
+                    "description": "La entidad del cargador a configurar."
+                },
+                "days": {
+                    "name": "Días",
+                    "description": "Días a borrar (por defecto: todos)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Establecer potencia de carga máxima",
+            "description": "Establece la potencia de carga máxima preferida en kW, compartida con la app Eve Connect.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entidad",
+                    "description": "La entidad del cargador a configurar."
+                },
+                "power": {
+                    "name": "Potencia",
+                    "description": "Potencia de carga máxima en kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Potencia solar"
+            },
+            "charging_status": {
+                "name": "Estado de carga"
+            },
+            "charging_limited_by": {
+                "name": "Carga limitada por"
+            },
+            "session_energy": {
+                "name": "Energía de la sesión"
+            },
+            "session_duration": {
+                "name": "Duración de la sesión"
+            },
+            "session_max_power": {
+                "name": "Potencia máx. de la sesión"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "Estado de conexión API"
+            },
+            "charging_restricted": {
+                "name": "Carga restringida"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Intervalo heartbeat"
+            },
+            "max_charging_power": {
+                "name": "Potencia de carga máxima"
+            },
+            "schedule_slot_power": {
+                "name": "Potencia de la franja"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Idioma de pantalla"
+            },
+            "charge_control": {
+                "name": "Control de carga"
+            },
+            "schedule_slot_days": {
+                "name": "Días de la franja"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Conmutación de fase"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Horario carga solar"
             },
             "dp_light_auto_dim": {
                 "name": "Atenuación auto pantalla"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy activado"
+            },
+            "charging_schedule_enabled": {
+                "name": "Programación de carga"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Reanudar carga"
+            },
+            "add_schedule_slot": {
+                "name": "Añadir franja"
+            },
+            "clear_schedule_days": {
+                "name": "Borrar días de la programación"
+            },
+            "replace_schedule_slots": {
+                "name": "Reemplazar franjas"
+            },
+            "export_charging_history": {
+                "name": "Exportar historial de carga"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Contraseña proxy"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Inicio de la franja"
+            },
+            "schedule_slot_end": {
+                "name": "Fin de la franja"
             }
         }
     },

@@ -2,9 +2,11 @@
 
 import asyncio
 from asyncio import timeout
+import datetime
 from datetime import timedelta
 import logging
 from ssl import CERT_NONE
+from typing import Any
 
 from aiohttp import ClientConnectionError, ClientSession, TCPConnector
 from aiohttp.connector import TCPConnector as TCPConnectorType
@@ -18,7 +20,9 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 from homeassistant.util.ssl import get_default_context
 
 from .alfen import AlfenDevice
@@ -37,6 +41,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 type AlfenConfigEntry = ConfigEntry[AlfenCoordinator]
+
+TRANSACTIONS_STORAGE_VERSION = 1
+TRANSACTIONS_SAVE_DELAY = 15  # seconds; batches saves during a history load
 
 
 def _create_tcp_connector() -> TCPConnectorType:
@@ -92,6 +99,20 @@ class AlfenCoordinator(DataUpdateCoordinator[None]):
         self.timeout = self.entry.options.get(CONF_TIMEOUT, DEFAULT_TIMEOUT)
         self._session: ClientSession | None = None
         self._session_lock = asyncio.Lock()  # Protect session recreation from race conditions
+        # Charging sessions survive restarts in .storage/alfen_wallbox.<entry>.transactions
+        self._transactions_store: Store[dict[str, Any]] = Store(
+            hass, TRANSACTIONS_STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.transactions"
+        )
+        # Draft time slot edited from the dashboard before pressing "Add".
+        # power_kw None means "station maximum".
+        # Signed CSV / JSON download links created by the export button
+        self.export_links: dict[str, str] | None = None
+        self.schedule_draft: dict[str, Any] = {
+            "start": datetime.time(22, 0),
+            "end": datetime.time(6, 0),
+            "power_kw": None,
+            "days": "every_day",
+        }
 
     async def _async_setup(self):
         """Set up the coordinator."""
@@ -117,10 +138,24 @@ class AlfenCoordinator(DataUpdateCoordinator[None]):
             self.entry.options.get(CONF_CATEGORY_FETCH_DELAY, DEFAULT_CATEGORY_FETCH_DELAY),
         )
         self.device.scan_interval = self.entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        # Restore the charging history and keep it saved
+        self.device.import_transactions(await self._transactions_store.async_load())
+        self.device._transactions_changed_callback = lambda: self._transactions_store.async_delay_save(
+            self.device.export_transactions, TRANSACTIONS_SAVE_DELAY
+        )
+        # Weekly schedule profiles are anchored on local midnight, like the app
+        self.device.timezone = dt_util.get_default_time_zone()
+        # Push charge-control / schedule changes to entities right away
+        self.device._state_changed_callback = self.async_update_listeners
         # Set callback for session recreation after logout
         self.device._session_recreate_callback = lambda: self._recreate_session()
         if not await self.async_connect():
             raise UpdateFailed("Error communicating with API")
+
+    async def async_save_transactions(self) -> None:
+        """Write the charging history to storage now (on unload)."""
+        if self.device is not None:
+            await self._transactions_store.async_save(self.device.export_transactions())
 
     async def _recreate_session(self):
         """Recreate the ClientSession with a new connector (e.g., after logout closes the connection)."""

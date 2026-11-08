@@ -7,6 +7,20 @@ The component is a fork of the [Garo Wallbox custom integration](https://github.
 
 ## Recent Improvements
 
+### Eve Connect feature parity & dashboard (November 2026, v3.6.0)
+
+The integration was compared against the official **Eve Connect** app (and the
+**MyEve** installer app). Home Assistant now uses the *same* charging profiles as
+Eve Connect, so pausing, boosting, the maximum power and the weekly schedule are
+shared: change it in one, see it in the other.
+
+- 🏠 **Charge Control** — `Charging` / `Paused` / `Boost` (3 h at full power), like the app's home screen
+- 🔋 **Session** — energy, duration and peak power of the current session
+- 🚦 **Charging Status** with the app's messages, plus **Charging Restricted** / **Charging Limited By** (load balancing, vehicle, installation)
+- ⚡ **Maximum Charging Power** (kW) — the app's Power-tab slider
+- 📅 **Weekly schedule** — up to 7 time slots per day, "apply schedule" switch, and a time-slot editor usable from any dashboard
+- 📊 **Ready-made dashboard** with Home, Power, Schedule, Insights and Settings tabs — see [Eve Connect dashboard](#eve-connect-dashboard)
+
 ### Charging Schedule Calendar & Insights (June 2026)
 
 **New entities for schedule visibility and session history:**
@@ -180,11 +194,16 @@ data:
   entity_id: alfen_wallbox.garage
 ```
 
-### - Add a charging profile (daily)
+### - Add a charging time slot
 
-Adds a charging window that repeats every day. Replace `sensor.wallbox_status_code_socket_1` with the actual entity ID of your wallbox.
+Adds a time slot to the weekly schedule, in the same format as the Eve Connect app.
+Existing slots are kept, overlapping slots are rejected (max. 7 per day), and a stop
+time at or before the start time continues into the next day. Use `max_power` (kW,
+like the app) or `max_current` (A); without either the station maximum is used.
+Replace `sensor.wallbox_status_code_socket_1` with an entity of your wallbox.
 
 ```yaml
+# Every day 09:00-17:00 at 16 A
 service: alfen_wallbox.add_charging_profile
 data:
   entity_id: sensor.wallbox_status_code_socket_1
@@ -194,49 +213,57 @@ data:
   recurrency: DAILY
 ```
 
-### - Add a charging profile (weekly, specific days)
-
-Adds a charging window that only runs on the specified days of the week.
-
 ```yaml
+# Weeknights 22:00-06:00 at 7.4 kW (each night is split into 22-24 and 00-06)
 service: alfen_wallbox.add_charging_profile
 data:
   entity_id: sensor.wallbox_status_code_socket_1
   start_time: "22:00"
   stop_time: "06:00"
-  max_current: 16
+  max_power: 7.4
   recurrency: WEEKLY
-  days:
-    - Monday
-    - Tuesday
-    - Wednesday
-    - Thursday
-    - Friday
+  days: [Monday, Tuesday, Wednesday, Thursday, Friday]
 ```
 
-### - Add a charging profile (all 7 days)
-
-To cover the full week, list all seven days:
+### - Replace the time slots of one day
 
 ```yaml
-service: alfen_wallbox.add_charging_profile
+service: alfen_wallbox.set_schedule_day
 data:
   entity_id: sensor.wallbox_status_code_socket_1
-  start_time: "09:15"
-  stop_time: "18:00"
-  max_current: 16
-  recurrency: WEEKLY
-  days:
-    - Monday
-    - Tuesday
-    - Wednesday
-    - Thursday
-    - Friday
-    - Saturday
-    - Sunday
+  day: Saturday
+  timeslots:
+    - {start: "00:00", end: "07:00", max_power: 11}
+    - {start: "12:00", end: "15:00", max_current: 10}
+```
+
+An empty `timeslots` list clears the day.
+
+### - Clear the schedule
+
+```yaml
+# Only the weekend; omit `days` to clear the whole schedule
+service: alfen_wallbox.clear_charging_schedule
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+  days: [Saturday, Sunday]
+```
+
+The schedule only *restricts* charging to its time slots while the
+**Charging Schedule** switch (the app's "Apply schedule") is on.
+
+### - Set the maximum charging power
+
+```yaml
+service: alfen_wallbox.set_max_power
+data:
+  entity_id: sensor.wallbox_status_code_socket_1
+  power: 7.4  # kW
 ```
 
 ### - Clear all charging profiles
+
+Removes **everything**: schedule, maximum power, boost and pause.
 
 ```yaml
 service: alfen_wallbox.clear_charging_profiles
@@ -247,6 +274,12 @@ data:
 ## Charging Schedule Calendar
 
 The integration creates a **Charging Schedule** calendar entity (`calendar.wallbox_charging_schedule`) that shows your configured charging windows as calendar events. Each event displays the charging power in kW and the current/phase details.
+
+The calendar is **editable** with Home Assistant's own calendar dialog (Calendar page in the sidebar, or tap an event on a calendar card):
+
+- **Add**: pick the Charging Schedule calendar, set a start and end time and put the power in the title, e.g. `7.4 kW` or `16 A` (no power = station maximum). *Repeat daily* or *repeat weekly on …* chooses the days; without a repeat the slot applies every week on that weekday, because the wallbox schedule is weekly.
+- **Edit / delete**: identical slots on several days form one repeating series. *This event* changes only that weekday; *this and following events* changes every day of the series.
+- Slots past midnight are split over two days, up to 7 slots per day, overlaps are rejected, and all-day or monthly events are not supported.
 
 The calendar refreshes automatically every ~5 minutes. After changing a schedule in Eve Connect, you can also press the **Refresh Charging Schedule** button to fetch the latest schedule immediately without waiting.
 
@@ -305,9 +338,33 @@ Each session entry contains:
 | `energy_kwh` | Energy delivered in this session (kWh) |
 | `tag` | RFID tag used to start the session |
 
-Sessions are sorted by most recent first, capped at the last 500 sessions.
+Sessions are sorted by most recent first, capped at the last 500 sessions in the sensor.
+They are saved in Home Assistant's storage (`.storage/alfen_wallbox.<entry>.transactions`,
+up to 5000 sessions) and restored after a restart, together with the read position, so
+**Load history** (Insights tab) only reads new log entries after the first full load.
 
 To enable the Insights sensor, add `transactions` to the **Refresh Categories** in the integration options. The data refreshes automatically every ~20 minutes; you can also press **Force Fetch Transaction** to update immediately.
+
+## Eve Connect dashboard
+
+[`dashboards/alfen_wallbox.yaml`](dashboards/alfen_wallbox.yaml) recreates the Eve
+Connect app with built-in cards only (Home Assistant 2024.8+):
+
+| Tab | Contents |
+|---|---|
+| **Home** | Status message, Charge Control (Charging / Paused / Boost), Boost · Pause · Charge buttons, restriction alert, session tile (charged, duration, power, peak), power gauge and 24 h history, live phase currents/voltages, solar / grid split and green share (with a solar mode) |
+| **Power** | Preferred maximum power slider, solar mode (Disable / Comfort / Green) with comfort level, green share and solar override |
+| **Schedule** | Apply-schedule switch, "time slot active now", a table with the time slots and power per weekday, and an editor: pick days (their slot is loaded), set from/to/power, *Save*, *Add extra slot* or *Clear*. The *Calendar* button opens HA's calendar for the same slots |
+| **Insights** | Charged energy this month / last month / this year / total and the last session (native table), *Load history* with progress, and an *Export charging history* button; the CSV / JSON download links appear in HA's notifications |
+| **Settings** | Model, serial, firmware, phases, connector, uptime, WiFi; log out/in (to use the app locally), refresh schedule, reboot |
+
+**Install:** *Settings → Dashboards → Add dashboard → New dashboard from scratch*,
+open it, *⋮ → Edit dashboard → ⋮ → Raw configuration editor* and paste the file.
+Entity IDs assume the wallbox was named **Alfen Wallbox**; otherwise find/replace
+`alfen_wallbox_` with your own prefix.
+
+For the Insights history, enable the `transactions` category in the integration
+options (or press *Load history* on the Insights tab).
 
 ## Development & Testing
 

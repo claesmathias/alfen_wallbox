@@ -4,11 +4,18 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CAT, SERVICE_DISABLE_PHASE_SWITCHING, SERVICE_ENABLE_PHASE_SWITCHING, VALUE
+from .const import (
+    CAT,
+    SERVICE_DISABLE_PHASE_SWITCHING,
+    SERVICE_ENABLE_PHASE_SWITCHING,
+    VALUE,
+    WEEKDAYS,
+)
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
 
@@ -30,16 +37,13 @@ ALFEN_SWITCH_TYPES: Final[tuple[AlfenSwitchDescription, ...]] = (
         key="lb_enable_phase_switching",
         name="Load Balancing Enable Phase Switching",
         api_param="2185_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="dp_light_auto_dim",
         name="Display Light Auto Dim",
         api_param="2061_1",
-    ),
-    AlfenSwitchDescription(
-        key="lb_solar_charging_schedule",
-        name="Solar Charging Schedule Enabled",
-        api_param="3280_1",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="lb_solar_charging_boost",
@@ -55,46 +59,55 @@ ALFEN_SWITCH_TYPES: Final[tuple[AlfenSwitchDescription, ...]] = (
         key="auth_white_list",
         name="Auth. Whitelist",
         api_param="213B_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="auth_local_list",
         name="Auth. Local List",
         api_param="213D_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="auth_restart_after_power_outage",
         name="Auth. Restart after Power Outage",
         api_param="215E_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="auth_remote_transaction_request",
         name="Auth. Remote Transaction requests",
         api_param="209B_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="proxy_enabled",
         name="Proxy Enabled",
         api_param="2117_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="active_load_balancing",
         name="Active Load Balancing",
         api_param="2064_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="wifi_enabled",
         name="WiFi Enabled",
         api_param="3284_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="wifi_ap_start_on_boot",
         name="WiFi AP Start on Boot",
         api_param="3291_0",
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenSwitchDescription(
         key="wifi_ap_enabled",
         name="WiFi AP Enabled",
         api_param="3292_0",
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -106,7 +119,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up Alfen switch entities from a config entry."""
 
-    switches = [AlfenSwitchSensor(entry, description) for description in ALFEN_SWITCH_TYPES]
+    switches: list[SwitchEntity] = [
+        AlfenSwitchSensor(entry, description) for description in ALFEN_SWITCH_TYPES
+    ]
+    switches.append(AlfenChargingScheduleSwitch(entry))
 
     async_add_entities(switches)
 
@@ -184,3 +200,42 @@ class AlfenSwitchSensor(AlfenEntity, SwitchEntity):
         """Disable phase switching."""
         await self.coordinator.device.set_phase_switching(False)
         await self.async_turn_off()
+
+
+class AlfenChargingScheduleSwitch(AlfenEntity, SwitchEntity):
+    """The Eve Connect "Apply schedule" toggle.
+
+    When on, the wallbox only charges inside the configured time slots.
+    """
+
+    _attr_icon = "mdi:calendar-clock"
+    _attr_translation_key = "charging_schedule_enabled"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Schedule"
+        self._attr_unique_id = f"{device.id}_charging_schedule_enabled"
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when the schedule is applied."""
+        return self.coordinator.device.schedule_enabled
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the slots per day so cards can show the schedule."""
+        schedule = self.coordinator.device.get_schedule()
+        return {
+            WEEKDAYS[day].lower(): [slot.as_dict() for slot in slots]
+            for day, slots in schedule.items()
+        }
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Only charge inside the scheduled time slots."""
+        await self.coordinator.device.set_schedule_enabled(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Charge at any time again."""
+        await self.coordinator.device.set_schedule_enabled(False)

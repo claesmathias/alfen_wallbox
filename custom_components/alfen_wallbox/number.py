@@ -13,16 +13,19 @@ from homeassistant.components.number import (
 from homeassistant.const import (
     CURRENCY_EURO,
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfPower,
     UnitOfTemperature,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 import voluptuous as vol
 
+from .alfen import ChargingProfileError
 from .const import (
     CAT,
     LICENSE_HIGH_POWER,
@@ -68,6 +71,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="2068_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="main_normal_max_current_socket_1",
@@ -98,6 +102,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="2062_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="lb_max_smart_meter_current",
@@ -113,6 +118,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="2067_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="lb_solar_charging_green_share",
@@ -120,7 +126,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         state=None,
         icon="mdi:current-ac",
         assumed_state=False,
-        device_class=NumberDeviceClass.POWER_FACTOR,
+        device_class=None,
         native_min_value=0,
         native_max_value=100,
         native_step=1,
@@ -135,7 +141,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         state=None,
         icon="mdi:current-ac",
         assumed_state=False,
-        device_class=NumberDeviceClass.POWER_FACTOR,
+        device_class=NumberDeviceClass.POWER,
         native_min_value=1350,
         native_max_value=11000,
         native_step=50,
@@ -150,7 +156,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         state=None,
         icon="mdi:lightbulb",
         assumed_state=False,
-        device_class=NumberDeviceClass.POWER_FACTOR,
+        device_class=None,
         native_min_value=0,
         native_max_value=100,
         native_step=10,
@@ -158,6 +164,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=PERCENTAGE,
         api_param="2061_2",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ps_installation_max_imbalance_current",
@@ -165,7 +172,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         state=None,
         icon="mdi:current-ac",
         assumed_state=False,
-        device_class=NumberDeviceClass.POWER_FACTOR,
+        device_class=NumberDeviceClass.CURRENT,
         native_min_value=0,
         native_max_value=10,
         native_step=1,
@@ -173,6 +180,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="2174_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="lb_Charging_profiles_random_delay",
@@ -180,7 +188,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         state=None,
         icon="mdi:timer-sand",
         assumed_state=False,
-        device_class=NumberDeviceClass.POWER_FACTOR,
+        device_class=NumberDeviceClass.DURATION,
         native_min_value=0,
         native_max_value=30,
         native_step=1,
@@ -188,6 +196,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="21B9_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="auth_re_authorize_after_power_outage",
@@ -203,6 +212,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2169_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="auth_connection_timeout",
@@ -218,6 +228,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2169_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ocpp_wired_ocpp_send_timeout",
@@ -233,6 +244,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="208D_1",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ocpp_mobile_ocpp_send_timeout",
@@ -248,6 +260,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="208D_2",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ocpp_wired_ocpp_reply_timeout",
@@ -263,6 +276,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="208E_1",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ocpp_mobile_ocpp_reply_timeout",
@@ -278,6 +292,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="208E_2",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="heartbeat_interval",
@@ -293,6 +308,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2086_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="price_start_tariff",
@@ -308,6 +324,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=CURRENCY_EURO,
         api_param="3262_2",
         round_digits=2,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="price_price_per_kwh",
@@ -323,6 +340,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=CURRENCY_EURO,
         api_param="3262_3",
         round_digits=2,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="price_price_per_minute",
@@ -338,6 +356,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=CURRENCY_EURO,
         api_param="3262_4",
         round_digits=2,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="price_price_other",
@@ -353,6 +372,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=CURRENCY_EURO,
         api_param="3262_6",
         round_digits=2,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ev_disconnection_timeout",
@@ -368,6 +388,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2136_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ev_non_charging_report_threshold",
@@ -383,6 +404,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2184_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="ev_auto_stop_transaction_time",
@@ -398,6 +420,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.SECONDS,
         api_param="2168_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="main_external_max_current_socket_1",
@@ -413,6 +436,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="212A_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="minimum_chameleon_current",
@@ -428,6 +452,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         api_param="206A_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="timzone_offset",
@@ -443,6 +468,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTime.MINUTES,
         api_param="206E_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="alarm_temperature_high",
@@ -458,6 +484,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTemperature.CELSIUS,
         api_param="2203_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
     AlfenNumberDescription(
         key="alarm_temperature_low",
@@ -473,6 +500,7 @@ ALFEN_NUMBER_TYPES: Final[tuple[AlfenNumberDescription, ...]] = (
         unit_of_measurement=UnitOfTemperature.CELSIUS,
         api_param="2204_0",
         round_digits=None,
+        entity_category=EntityCategory.CONFIG,
     ),
 )
 
@@ -501,7 +529,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Alfen select entities from a config entry."""
-    numbers = [AlfenNumber(entry, description) for description in ALFEN_NUMBER_TYPES]
+    numbers: list[NumberEntity] = [
+        AlfenNumber(entry, description) for description in ALFEN_NUMBER_TYPES
+    ]
+    numbers.append(AlfenMaxPowerNumber(entry))
+    numbers.append(AlfenScheduleSlotPowerNumber(entry))
 
     async_add_entities(numbers)
 
@@ -664,3 +696,94 @@ class AlfenNumber(AlfenEntity, NumberEntity):
     async def async_update(self):
         """Get the latest data and updates the states."""
         self._set_current_option()
+
+
+class AlfenMaxPowerNumber(AlfenEntity, NumberEntity):
+    """Preferred maximum charging power (Eve Connect "Power" tab).
+
+    Stored on the wallbox as the app's max-power charging profile, so the value
+    is shared with the app. Without a profile the station maximum applies.
+    """
+
+    _attr_icon = "mdi:speedometer"
+    _attr_translation_key = "max_charging_power"
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_native_step = 0.1
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Maximum Charging Power"
+        self._attr_unique_id = f"{device.id}_max_charging_power"
+
+    @property
+    def native_min_value(self) -> float:
+        """Return the minimum power (6 A on one phase)."""
+        return self.coordinator.device.min_station_power
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the station maximum for the phases present."""
+        return self.coordinator.device.max_station_power
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the preferred maximum, or the station maximum when unset."""
+        device = self.coordinator.device
+        value = device.max_power
+        return device.max_station_power if value is None else min(value, device.max_station_power)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return whether a limit is stored and how it maps to amps."""
+        device = self.coordinator.device
+        return {"limited": device.max_power is not None, "active_phases": device.active_phases}
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Store a new preferred maximum power."""
+        try:
+            await self.coordinator.device.set_max_power(value)
+        except ChargingProfileError as err:
+            raise HomeAssistantError(str(err)) from err
+
+
+class AlfenScheduleSlotPowerNumber(AlfenEntity, NumberEntity):
+    """Maximum power of the draft time slot (used by the schedule editor)."""
+
+    _attr_icon = "mdi:flash"
+    _attr_translation_key = "schedule_slot_power"
+    _attr_device_class = NumberDeviceClass.POWER
+    _attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+    _attr_native_step = 0.1
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Schedule Slot Power"
+        self._attr_unique_id = f"{device.id}_schedule_slot_power"
+
+    @property
+    def native_min_value(self) -> float:
+        """Return the minimum power."""
+        return self.coordinator.device.min_station_power
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the station maximum."""
+        return self.coordinator.device.max_station_power
+
+    @property
+    def native_value(self) -> float:
+        """Return the draft power (station maximum by default)."""
+        value = self.coordinator.schedule_draft["power_kw"]
+        return self.native_max_value if value is None else value
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Store the draft power."""
+        self.coordinator.schedule_draft["power_kw"] = float(value)
+        self.async_write_ha_state()

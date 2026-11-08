@@ -20,8 +20,10 @@ from .const import (
     DEFAULT_REFRESH_CATEGORIES,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TIMEOUT,
+    DOMAIN,
 )
 from .coordinator import AlfenConfigEntry, AlfenCoordinator, options_update_listener
+from .export import AlfenExportView
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -32,7 +34,13 @@ PLATFORMS = [
     Platform.SENSOR,
     Platform.SWITCH,
     Platform.TEXT,
+    Platform.TIME,
 ]
+
+# Entities removed in 3.6.0 (unique_id suffixes). "Solar Charging Schedule Enabled"
+# was an on/off switch for 3280_1, which is really the 3-way solar charging mode
+# already exposed by the "Solar Charging Mode" select.
+REMOVED_ENTITY_UNIQUE_ID_SUFFIXES = ("_lb_solar_charging_schedule",)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +82,12 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: AlfenConfigEntr
 async def async_setup_entry(hass: HomeAssistant, config_entry: AlfenConfigEntry) -> bool:
     """Set up Alfen from a config entry."""
     await er.async_migrate_entries(hass, config_entry.entry_id, async_migrate_entity_entry)
+    _async_remove_obsolete_entities(hass, config_entry)
+
+    # Authenticated CSV / JSON download of the charging history (registered once)
+    if hass.http is not None and not hass.data.get(f"{DOMAIN}_export_view"):
+        hass.http.register_view(AlfenExportView())
+        hass.data[f"{DOMAIN}_export_view"] = True
 
     coordinator = AlfenCoordinator(hass, config_entry)
     await coordinator.async_config_entry_first_refresh()
@@ -90,6 +104,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: AlfenConfigEntry
     coordinator = config_entry.runtime_data
     _LOGGER.debug("[%s] async_unload_entry", coordinator.device.log_id)
 
+    await coordinator.async_save_transactions()
     await coordinator.device.logout()
 
     # Close the dedicated ClientSession
@@ -97,6 +112,16 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: AlfenConfigEntry
         await coordinator._session.close()
 
     return await hass.config_entries.async_unload_platforms(config_entry, PLATFORMS)
+
+
+@callback
+def _async_remove_obsolete_entities(hass: HomeAssistant, config_entry: AlfenConfigEntry) -> None:
+    """Remove registry entries of entities this version no longer provides."""
+    registry = er.async_get(hass)
+    for entity_entry in er.async_entries_for_config_entry(registry, config_entry.entry_id):
+        if entity_entry.unique_id.endswith(REMOVED_ENTITY_UNIQUE_ID_SUFFIXES):
+            _LOGGER.debug("Removing obsolete entity %s", entity_entry.entity_id)
+            registry.async_remove(entity_entry.entity_id)
 
 
 @callback

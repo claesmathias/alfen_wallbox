@@ -4,8 +4,6 @@ from dataclasses import dataclass
 import datetime
 from typing import Any, Final
 
-import voluptuous as vol
-
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -23,22 +21,33 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
 )
-import homeassistant.helpers.config_validation as cv
 from homeassistant.core import HomeAssistant, SupportsResponse, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_platform
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import StateType
+from homeassistant.util import dt as dt_util
+import voluptuous as vol
 
+from . import charging
+from .alfen import ChargingProfileError
 from .const import (
     CAT,
     ID,
+    PROP_LIMITING_FACTOR,
+    PROP_MAIN_STATE_SOCKET_1,
+    PROP_SOLAR_CHARGING_MODE,
     SERVICE_ADD_CHARGING_PROFILE,
     SERVICE_CLEAR_CHARGING_PROFILES,
+    SERVICE_CLEAR_CHARGING_SCHEDULE,
     SERVICE_GET_CHARGING_PROFILES,
     SERVICE_REBOOT_WALLBOX,
+    SERVICE_SET_MAX_POWER,
+    SERVICE_SET_SCHEDULE_DAY,
     VALUE,
+    WEEKDAYS,
 )
-from .calendar import WEEKDAY_MAP, _normalize_periods, _seconds_to_time
 from .coordinator import AlfenConfigEntry
 from .entity import AlfenEntity
 
@@ -229,7 +238,7 @@ MAIN_STATE_DICT: Final[dict[int, str]] = {
     44: "Wait for Start Metervalue",
     45: "Wait for Stop Metervalue",
     46: "Error Socket Motor",
-    47: "Cable Conencted Type E",
+    47: "Cable Connected Type E",
     48: "Cable Connected Time out Type E",
     49: "Charging Type E",
     50: "Wait for Disconnect Type E",
@@ -1711,6 +1720,18 @@ async def async_setup_entry(
         for day_name, weekday in _SCHEDULE_DAYS
     ])
     async_add_entities([AlfenTransactionsSensor(entry)])
+    async_add_entities(
+        [
+            AlfenChargingStatusSensor(entry),
+            AlfenChargingLimitSensor(entry),
+            AlfenSessionSensor(entry, "energy"),
+            AlfenSessionSensor(entry, "duration"),
+            AlfenSessionSensor(entry, "max_power"),
+            *(AlfenHistorySummarySensor(entry, kind) for kind in HISTORY_SUMMARY_KINDS),
+            AlfenLastSessionSensor(entry),
+            *(AlfenSolarSplitSensor(entry, kind) for kind in SOLAR_SPLIT_KINDS),
+        ]
+    )
 
     coordinator = entry.runtime_data
     if coordinator.device.get_number_of_sockets() == 2:
@@ -1740,17 +1761,45 @@ async def async_setup_entry(
             {
                 vol.Required("start_time"): cv.string,
                 vol.Required("stop_time"): cv.string,
-                vol.Required("max_current"): vol.All(vol.Coerce(int), vol.Range(min=1, max=32)),
+                vol.Optional("max_current"): vol.All(vol.Coerce(float), vol.Range(min=1, max=80)),
+                vol.Optional("max_power"): vol.All(vol.Coerce(float), vol.Range(min=1.4, max=44)),
                 vol.Optional("recurrency", default="DAILY"): vol.In(["DAILY", "WEEKLY"]),
-                vol.Optional("days", default=[]): vol.All(
-                    [
-                        vol.In(
-                            ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                        )
-                    ]
-                ),
+                vol.Optional("days", default=[]): vol.All(cv.ensure_list, [vol.In(WEEKDAYS)]),
             },
             "async_add_charging_profile",
+        )
+
+        platform.async_register_entity_service(
+            SERVICE_SET_SCHEDULE_DAY,
+            {
+                vol.Required("day"): vol.In(WEEKDAYS),
+                vol.Optional("timeslots", default=[]): vol.All(
+                    cv.ensure_list,
+                    [
+                        vol.Schema(
+                            {
+                                vol.Required("start"): cv.string,
+                                vol.Required("end"): cv.string,
+                                vol.Optional("max_power"): vol.Coerce(float),
+                                vol.Optional("max_current"): vol.Coerce(float),
+                            }
+                        )
+                    ],
+                ),
+            },
+            "async_set_schedule_day",
+        )
+
+        platform.async_register_entity_service(
+            SERVICE_CLEAR_CHARGING_SCHEDULE,
+            {vol.Optional("days"): vol.All(cv.ensure_list, [vol.In(WEEKDAYS)])},
+            "async_clear_charging_schedule",
+        )
+
+        platform.async_register_entity_service(
+            SERVICE_SET_MAX_POWER,
+            {vol.Required("power"): vol.All(vol.Coerce(float), vol.Range(min=0, max=44))},
+            "async_set_max_power",
         )
 
         platform.async_register_entity_service(
@@ -1826,47 +1875,65 @@ class AlfenMainSensor(AlfenEntity):
         profiles = await self.coordinator.device.get_charging_profiles()
         return {"charging_profiles": profiles}
 
-    async def async_add_charging_profile(self, start_time: str, stop_time: str, max_current: int, recurrency: str, days: list[str]) -> None:
-        """Add a charging profile."""
-        # Parse start/stop times into minutes-since-midnight (startPeriod)
-        start_h, start_m = (int(x) for x in start_time.split(":"))
-        stop_h, stop_m = (int(x) for x in stop_time.split(":"))
-        start_period = start_h * 3600 + start_m * 60
-        stop_period = stop_h * 3600 + stop_m * 60
+    async def async_add_charging_profile(
+        self,
+        start_time: str,
+        stop_time: str,
+        max_current: float | None = None,
+        max_power: float | None = None,
+        recurrency: str = "DAILY",
+        days: list[str] | None = None,
+    ) -> None:
+        """Add a time slot to the weekly schedule (Eve Connect compatible).
 
-        # Duration in seconds from start to stop
-        duration = stop_period - start_period
-        if duration <= 0:
-            duration += 24 * 3600  # handle midnight wrap-around
+        DAILY adds the slot to every day, WEEKLY to the given days. Existing
+        slots are kept; overlapping slots are rejected like in the app.
+        """
+        device = self.coordinator.device
+        weekdays = (
+            [WEEKDAYS.index(day) for day in days]
+            if recurrency == "WEEKLY" and days
+            else list(range(7))
+        )
+        try:
+            slot = device.make_timeslot(
+                start=charging.hhmm_to_seconds(start_time),
+                end=charging.hhmm_to_seconds(stop_time),
+                power_kw=max_power,
+                current=max_current if max_power is None else None,
+            )
+            await device.add_schedule_slot(weekdays, slot)
+        except (ChargingProfileError, ValueError) as err:
+            raise HomeAssistantError(str(err)) from err
 
-        schedule: dict[str, Any] = {
-            "chargingProfileId": -19930828,
-            "stackLevel": 0,
-            "chargingProfilePurpose": "TxDefaultProfile",
-            "chargingProfileKind": "Recurring",
-            "recurrencyKind": recurrency,
-            "chargingSchedule": {
-                "chargingRateUnit": "A",
-                "duration": duration,
-                "chargingSchedulePeriod": [
-                    {
-                        "startPeriod": start_period,
-                        "limit": max_current,
-                        "numberPhases": self.coordinator.device.max_allowed_phases,
-                    },
-                    {
-                        "startPeriod": stop_period,
-                        "limit": 0,
-                        "numberPhases": self.coordinator.device.max_allowed_phases,
-                    },
-                ],
-            },
-        }
+    async def async_set_schedule_day(self, day: str, timeslots: list[dict[str, Any]]) -> None:
+        """Replace all time slots of one weekday (an empty list clears it)."""
+        device = self.coordinator.device
+        try:
+            slots = [
+                device.make_timeslot(
+                    start=charging.hhmm_to_seconds(item["start"]),
+                    end=charging.hhmm_to_seconds(item["end"]),
+                    power_kw=item.get("max_power"),
+                    current=item.get("max_current") if item.get("max_power") is None else None,
+                )
+                for item in timeslots
+            ]
+            await device.set_schedule_day(WEEKDAYS.index(day), slots)
+        except (ChargingProfileError, ValueError) as err:
+            raise HomeAssistantError(str(err)) from err
 
-        if recurrency == "WEEKLY" and days:
-            schedule["daysOfWeek"] = days
+    async def async_clear_charging_schedule(self, days: list[str] | None = None) -> None:
+        """Remove the schedule time slots (all days, or only the given days)."""
+        weekdays = [WEEKDAYS.index(day) for day in days] if days else None
+        await self.coordinator.device.clear_schedule(weekdays)
 
-        await self.coordinator.device.add_charging_profile(schedule)
+    async def async_set_max_power(self, power: float) -> None:
+        """Set the preferred maximum charging power in kW."""
+        try:
+            await self.coordinator.device.set_max_power(power)
+        except ChargingProfileError as err:
+            raise HomeAssistantError(str(err)) from err
 
     async def async_clear_charging_profiles(self) -> None:
         """Clear all charging profiles."""
@@ -2338,56 +2405,22 @@ class AlfenSensor(AlfenEntity, SensorEntity):
         self._async_update_attrs()
 
 
-_SCHEDULE_DAYS: Final = [
-    ("Monday", 0),
-    ("Tuesday", 1),
-    ("Wednesday", 2),
-    ("Thursday", 3),
-    ("Friday", 4),
-    ("Saturday", 5),
-    ("Sunday", 6),
-]
+_SCHEDULE_DAYS: Final = [(day, index) for index, day in enumerate(WEEKDAYS)]
 
 
-def _schedule_day_info(profiles: list[dict], weekday: int) -> dict | None:
-    """Return the first active charging window for *weekday* (0=Mon) or None."""
-    for profile in profiles:
-        start_schedule = profile.get("startSchedule")
-        if start_schedule:
-            try:
-                anchor = datetime.datetime.fromisoformat(
-                    start_schedule.replace("Z", "+00:00")
-                )
-                if anchor.weekday() != weekday:
-                    continue
-            except (ValueError, AttributeError):
-                continue
-        else:
-            recurrency = profile.get("recurrencyKind", "DAILY")
-            if recurrency in ("WEEKLY", "Weekly"):
-                days_of_week = profile.get("daysOfWeek", [])
-                if weekday not in {WEEKDAY_MAP[d] for d in days_of_week if d in WEEKDAY_MAP}:
-                    continue
-
-        periods = _normalize_periods(profile)
-        for idx, (sp, limit, phases) in enumerate(periods):
-            if limit <= 0:
-                continue
-            end_sp: int | None = None
-            for next_sp, next_limit, _ in periods[idx + 1 :]:
-                if next_limit == 0:
-                    end_sp = next_sp
-                    break
-            if end_sp is None:
-                end_sp = sp + 86400
-            return {
-                "start": _seconds_to_time(sp).strftime("%H:%M"),
-                "end": _seconds_to_time(end_sp).strftime("%H:%M"),
-                "power_kw": round(limit * phases * 230 / 1000, 1),
-                "current_a": limit,
-                "phases": phases,
-            }
-    return None
+def _day_summary(slots: list[charging.TimeSlot]) -> dict[str, Any] | None:
+    """Summarise a day's slots; top-level keys describe the first slot."""
+    if not slots:
+        return None
+    first = slots[0].as_dict()
+    return {
+        "start": first["start"],
+        "end": first["end"],
+        "power_kw": first["power_kw"],
+        "current_a": first["current_a"],
+        "phases": first["phases"],
+        "slots": [slot.as_dict() for slot in slots],
+    }
 
 
 class AlfenScheduleSensor(AlfenEntity, SensorEntity):
@@ -2397,66 +2430,77 @@ class AlfenScheduleSensor(AlfenEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
         super().__init__(entry)
         device = self.coordinator.device
         self._attr_name = f"{device.name} Charging Schedule"
         self._attr_unique_id = f"{device.id}-charging_schedule"
 
+    def _schedule(self) -> dict[int, list[charging.TimeSlot]]:
+        return charging.schedule_from_profiles(self.coordinator.device.charging_profiles)
+
     @property
     def native_value(self) -> int:
-        """Return the number of weekdays that have at least one active charging window."""
-        profiles = self.coordinator.device.charging_profiles
-        return sum(
-            1
-            for _, wd in _SCHEDULE_DAYS
-            if _schedule_day_info(profiles, wd) is not None
-        )
+        """Return the number of weekdays that have at least one time slot."""
+        return sum(1 for slots in self._schedule().values() if slots)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return a per-day summary of all configured windows."""
-        profiles = self.coordinator.device.charging_profiles
+        """Return a per-day summary of all configured time slots."""
         schedule = {}
-        for day_name, wd in _SCHEDULE_DAYS:
-            info = _schedule_day_info(profiles, wd)
-            if info:
-                schedule[day_name.lower()] = info
+        for day, slots in self._schedule().items():
+            summary = _day_summary(slots)
+            if summary:
+                schedule[WEEKDAYS[day].lower()] = summary
         return {"schedule": schedule}
 
 
 class AlfenScheduleDaySensor(AlfenEntity, SensorEntity):
-    """Sensor showing the charging schedule window for a specific day of the week."""
+    """Sensor showing the charging time slots of a specific day of the week."""
 
     _attr_icon = "mdi:calendar-today"
 
     def __init__(self, entry: AlfenConfigEntry, day_name: str, weekday: int) -> None:
+        """Initialize."""
         super().__init__(entry)
         device = self.coordinator.device
         self._weekday = weekday
         self._attr_name = f"{device.name} Schedule {day_name}"
         self._attr_unique_id = f"{device.id}-schedule_{day_name.lower()}"
 
+    def _slots(self) -> list[charging.TimeSlot]:
+        schedule = charging.schedule_from_profiles(self.coordinator.device.charging_profiles)
+        return schedule[self._weekday]
+
     @property
     def native_value(self) -> str:
-        """Return 'HH:MM–HH:MM' when a window is configured, else 'No schedule'."""
-        info = _schedule_day_info(self.coordinator.device.charging_profiles, self._weekday)
-        if info is None:
+        """Return e.g. '00:00–06:00 (11.0 kW), 22:00–24:00 (7.4 kW)' or 'No schedule'."""
+        slots = self._slots()
+        if not slots:
             return "No schedule"
-        return f"{info['start']}–{info['end']}"
+        return ", ".join(
+            f"{charging.seconds_to_hhmm(s.start)}–{charging.seconds_to_hhmm(s.end)} ({s.power_kw} kW)"
+            for s in slots
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        info = _schedule_day_info(self.coordinator.device.charging_profiles, self._weekday)
-        if info is None:
-            return {"scheduled": False}
-        return {
-            "scheduled": True,
-            "start": info["start"],
-            "end": info["end"],
-            "power_kw": info["power_kw"],
-            "current_a": info["current_a"],
-            "phases": info["phases"],
-        }
+        """Return the slots of the day."""
+        summary = _day_summary(self._slots())
+        if summary is None:
+            return {"scheduled": False, "slots": []}
+        return {"scheduled": True, **summary}
+
+
+def _export_attributes(coordinator: Any) -> dict[str, Any]:
+    """Signed download links from the last export (until they expire)."""
+    links = getattr(coordinator, "export_links", None)
+    if not isinstance(links, dict):
+        return {}
+    expires = dt_util.parse_datetime(links.get("expires", ""))
+    if expires is None or expires <= dt_util.now():
+        return {}
+    return {"export_csv": links["csv"], "export_json": links["json"], "export_expires": links["expires"]}
 
 
 class AlfenTransactionsSensor(AlfenEntity, SensorEntity):
@@ -2471,6 +2515,7 @@ class AlfenTransactionsSensor(AlfenEntity, SensorEntity):
     _attr_native_unit_of_measurement = "sessions"
 
     def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
         super().__init__(entry)
         device = self.coordinator.device
         self._attr_name = f"{device.name} Insights"
@@ -2478,8 +2523,370 @@ class AlfenTransactionsSensor(AlfenEntity, SensorEntity):
 
     @property
     def native_value(self) -> int:
+        """Return the number of recorded sessions."""
         return len(self.coordinator.device.transactions)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"transactions": self.coordinator.device.transactions}
+        """Return the sessions plus totals, like the app's Insights tab."""
+        device = self.coordinator.device
+        transactions = device.transactions
+        total = round(sum(t.get("energy_kwh") or 0 for t in transactions), 3)
+        return {
+            "transactions": transactions,
+            "total_energy_kwh": total,
+            "loading": getattr(device, "transactions_loading", False),
+            "loaded_until": getattr(device, "transactions_loaded_until", None),
+            **_export_attributes(self.coordinator),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Eve Connect home screen
+# ---------------------------------------------------------------------------
+
+
+class AlfenChargingStatusSensor(AlfenEntity, SensorEntity):
+    """Human readable charging status, worded like the Eve Connect home screen."""
+
+    _attr_icon = "mdi:ev-station"
+    _attr_translation_key = "charging_status"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Status"
+        self._attr_unique_id = f"{device.id}-charging_status"
+
+    def _state(self) -> int | None:
+        prop = self.coordinator.device.properties.get(PROP_MAIN_STATE_SOCKET_1)
+        try:
+            return int(prop[VALUE]) if prop else None
+        except (TypeError, ValueError):
+            return None
+
+    @property
+    def available(self) -> bool:
+        """Return True when the main socket state is known."""
+        return self._state() is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the app's status message, adjusted for pause / boost / solar."""
+        state = self._state()
+        if state is None:
+            return None
+        device = self.coordinator.device
+        connected = state not in charging.IDLE_MAIN_STATES
+        if connected and device.pause_active:
+            return "Charging session has been paused."
+        if connected and device.boost_active:
+            return "Charging with all available power."
+        if state in charging.CHARGING_MAIN_STATES:
+            mode = device.properties.get(PROP_SOLAR_CHARGING_MODE, {}).get(VALUE)
+            if mode == 1:
+                return "Solar charging using comfort mode."
+            if mode == 2:
+                return "Solar charging using green mode."
+        return charging.SOCKET_MAIN_STATE.get(state, ("unknown", "Status unknown, please wait..."))[1]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the raw state for automations and conditional cards."""
+        state = self._state()
+        device = self.coordinator.device
+        return {
+            "state_code": state,
+            "state": charging.SOCKET_MAIN_STATE.get(state, ("unknown", ""))[0] if state is not None else None,
+            "vehicle_connected": state is not None and state not in charging.IDLE_MAIN_STATES,
+            "charging": state in charging.CHARGING_MAIN_STATES,
+            "charge_control": device.charge_control,
+        }
+
+
+class AlfenChargingLimitSensor(AlfenEntity, SensorEntity):
+    """What currently limits the charging current (218F_1)."""
+
+    _attr_icon = "mdi:speedometer-slow"
+    _attr_translation_key = "charging_limited_by"
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Charging Limited By"
+        self._attr_unique_id = f"{device.id}-charging_limited_by"
+
+    def _flags(self) -> list[int] | None:
+        prop = self.coordinator.device.properties.get(PROP_LIMITING_FACTOR)
+        return None if prop is None else charging.decode_limiting_factor(prop[VALUE])
+
+    @property
+    def available(self) -> bool:
+        """Return True when the wallbox reports a limiting factor."""
+        return self._flags() is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the limiting factor(s), e.g. 'cable' or 'alb_active'."""
+        flags = self._flags()
+        if flags is None:
+            return None
+        if not flags:
+            return "none"
+        return ", ".join(charging.LIMITING_FACTOR_FLAGS[flag] for flag in flags)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the group used by the app's "charging restricted" alert."""
+        flags = self._flags() or []
+        return {"group": charging.limiting_group(flags), "flags": flags}
+
+
+class AlfenSessionSensor(AlfenEntity, SensorEntity):
+    """Energy, duration or peak power of the current (or last) session."""
+
+    def __init__(self, entry: AlfenConfigEntry, kind: str) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._kind = kind
+        self._attr_translation_key = f"session_{kind}"
+        self._attr_unique_id = f"{device.id}-session_{kind}"
+        if kind == "energy":
+            self._attr_name = f"{device.name} Session Energy"
+            self._attr_icon = "mdi:battery-charging"
+            self._attr_device_class = SensorDeviceClass.ENERGY
+            self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+            self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+            self._attr_suggested_display_precision = 2
+        elif kind == "duration":
+            self._attr_name = f"{device.name} Session Duration"
+            self._attr_icon = "mdi:timer-outline"
+            self._attr_device_class = SensorDeviceClass.DURATION
+            self._attr_native_unit_of_measurement = UnitOfTime.SECONDS
+            self._attr_suggested_unit_of_measurement = UnitOfTime.MINUTES
+        else:
+            self._attr_name = f"{device.name} Session Max Power"
+            self._attr_icon = "mdi:flash"
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+            self._attr_suggested_display_precision = 1
+
+    @property
+    def native_value(self) -> float | int | None:
+        """Return the session value."""
+        device = self.coordinator.device
+        if self._kind == "energy":
+            return device.session.get("energy_kwh")
+        if self._kind == "duration":
+            return device.session_duration
+        peak = device.session.get("max_power_w")
+        return None if peak is None else round(peak / 1000, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return whether the session is still running and when it started."""
+        session = self.coordinator.device.session
+        start, end = session.get("start"), session.get("end")
+        return {
+            "active": session.get("active", False),
+            "start": start.isoformat() if start else None,
+            "end": end.isoformat() if end else None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Charging history summary (Insights tab)
+# ---------------------------------------------------------------------------
+
+_HISTORY_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+HISTORY_SUMMARY_KINDS: Final = {
+    "this_month": "Charged This Month",
+    "last_month": "Charged Last Month",
+    "this_year": "Charged This Year",
+    "total": "Charged Total",
+}
+
+
+def _session_start(session: dict[str, Any]) -> datetime.datetime | None:
+    try:
+        return datetime.datetime.strptime(
+            session.get("start_date") or session.get("stop_date") or "", _HISTORY_DATE_FORMAT
+        )
+    except ValueError:
+        return None
+
+
+def history_summary(
+    sessions: list[dict[str, Any]], kind: str, today: datetime.date
+) -> tuple[float, int]:
+    """Return (kWh, sessions) for a period; sessions count by their start date."""
+    first_this_month = today.replace(day=1)
+    last_month_end = first_this_month - datetime.timedelta(days=1)
+    energy, count = 0.0, 0
+    for session in sessions:
+        start = _session_start(session)
+        if start is None:
+            continue
+        day = start.date()
+        if kind == "this_month":
+            match = (day.year, day.month) == (today.year, today.month)
+        elif kind == "last_month":
+            match = (day.year, day.month) == (last_month_end.year, last_month_end.month)
+        elif kind == "this_year":
+            match = day.year == today.year
+        else:
+            match = True
+        if match:
+            energy += session.get("energy_kwh") or 0
+            count += 1
+    return round(energy, 2), count
+
+
+class AlfenHistorySummarySensor(AlfenEntity, SensorEntity):
+    """Energy charged in a period, from the saved charging history."""
+
+    _attr_icon = "mdi:counter"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, entry: AlfenConfigEntry, kind: str) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._kind = kind
+        self._attr_name = f"{device.name} {HISTORY_SUMMARY_KINDS[kind]}"
+        self._attr_unique_id = f"{device.id}-history_{kind}"
+
+    @property
+    def native_value(self) -> float:
+        """Return the kWh charged in the period."""
+        return history_summary(self.coordinator.device.transactions, self._kind, dt_util.now().date())[0]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the number of sessions in the period."""
+        return {
+            "sessions": history_summary(
+                self.coordinator.device.transactions, self._kind, dt_util.now().date()
+            )[1]
+        }
+
+
+class AlfenLastSessionSensor(AlfenEntity, SensorEntity):
+    """Energy of the most recent charging session in the history."""
+
+    _attr_icon = "mdi:car-electric"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, entry: AlfenConfigEntry) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._attr_name = f"{device.name} Last Charging Session"
+        self._attr_unique_id = f"{device.id}-history_last_session"
+
+    def _last(self) -> dict[str, Any] | None:
+        sessions = self.coordinator.device.transactions
+        return sessions[0] if sessions else None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the kWh of the last session (None while it is still open)."""
+        last = self._last()
+        return last.get("energy_kwh") if last else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return start, end, duration and tag of the last session."""
+        last = self._last()
+        if not last:
+            return {}
+        start = _session_start(last)
+        try:
+            end = datetime.datetime.strptime(last.get("stop_date") or "", _HISTORY_DATE_FORMAT)
+        except ValueError:
+            end = None
+        return {
+            "start": last.get("start_date"),
+            "end": last.get("stop_date"),
+            "duration_minutes": int((end - start).total_seconds() // 60) if start and end else None,
+            "tag": last.get("tag"),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Solar / grid split of the charging power (Eve Connect home-screen orb)
+# ---------------------------------------------------------------------------
+
+SOLAR_SPLIT_KINDS: Final = {
+    "solar_power": ("Solar Charging Power", "mdi:solar-power"),
+    "grid_power": ("Grid Charging Power", "mdi:transmission-tower"),
+    "green_share": ("Green Share", "mdi:leaf"),
+    "session_green_share": ("Session Green Share", "mdi:leaf-circle"),
+}
+
+
+class AlfenSolarSplitSensor(AlfenEntity, SensorEntity):
+    """How much of the charging comes from solar vs the grid.
+
+    Uses the smart meter's net power (5221_16) like Eve Connect: while exporting
+    all charging power is solar, while importing the imported part is grid.
+    """
+
+    def __init__(self, entry: AlfenConfigEntry, kind: str) -> None:
+        """Initialize."""
+        super().__init__(entry)
+        device = self.coordinator.device
+        self._kind = kind
+        name, icon = SOLAR_SPLIT_KINDS[kind]
+        self._attr_name = f"{device.name} {name}"
+        self._attr_icon = icon
+        # "solar_power" is already used by the existing Solar Power sensor (3276_2)
+        unique = {"solar_power": "solar_charging_power"}.get(kind, kind)
+        self._attr_unique_id = f"{device.id}-{unique}"
+        if kind.endswith("_power"):
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+            self._attr_native_unit_of_measurement = UnitOfPower.WATT
+            self._attr_suggested_display_precision = 0
+        else:
+            self._attr_native_unit_of_measurement = PERCENTAGE
+            self._attr_suggested_display_precision = 0
+            if kind == "green_share":
+                self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def available(self) -> bool:
+        """Only with a smart meter connected to the wallbox."""
+        return bool(getattr(self.coordinator.device, "has_smart_meter_power", False))
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the solar / grid power or the green share."""
+        device = self.coordinator.device
+        solar, grid = device.charging_split
+        if self._kind == "solar_power":
+            return round(solar)
+        if self._kind == "grid_power":
+            return round(grid)
+        if self._kind == "green_share":
+            total = solar + grid
+            return round(solar / total * 100, 1) if total > 0 else None
+        return device.session_green_share
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Session solar / grid energy for the session share."""
+        if self._kind != "session_green_share":
+            return None
+        session = self.coordinator.device.session
+        return {
+            "solar_kwh": round((session.get("solar_wh") or 0) / 1000, 2),
+            "grid_kwh": round((session.get("grid_wh") or 0) / 1000, 2),
+        }

@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Ladeprofil hinzufügen",
-            "description": "Fügt einen Zeitslot für den Ladeplan zur Wallbox hinzu.",
+            "name": "Ladezeitfenster hinzufügen",
+            "description": "Fügt dem wöchentlichen Ladeplan ein Zeitfenster hinzu (kompatibel mit Eve Connect). Bestehende Zeitfenster bleiben erhalten; überlappende werden abgelehnt.",
             "fields": {
                 "entity_id": {
                     "name": "Entität",
@@ -201,7 +201,7 @@
                 },
                 "max_current": {
                     "name": "Max. Strom",
-                    "description": "Maximaler Ladestrom in Ampere (1-32A)."
+                    "description": "Maximaler Ladestrom in Ampere."
                 },
                 "recurrency": {
                     "name": "Wiederholung",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Tage",
                     "description": "Wochentage für die WÖCHENTLICHE Wiederholung."
+                },
+                "max_power": {
+                    "name": "Max. Leistung",
+                    "description": "Maximale Leistung in kW (Alternative zum max. Strom)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entität",
                     "description": "Die zu konfigurierende Wallbox-Entität."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Ladeplan-Tag festlegen",
+            "description": "Ersetzt alle Ladezeitfenster eines Wochentags (kompatibel mit Eve Connect). Eine leere Liste löscht den Tag.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entität",
+                    "description": "Die zu konfigurierende Wallbox-Entität."
+                },
+                "day": {
+                    "name": "Tag",
+                    "description": "Zu konfigurierender Wochentag."
+                },
+                "timeslots": {
+                    "name": "Zeitfenster",
+                    "description": "Liste von Zeitfenstern mit Start und Ende (HH:MM) und max_power (kW) oder max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Ladeplan löschen",
+            "description": "Entfernt die Zeitfenster der angegebenen Tage oder den gesamten Plan, wenn keine Tage angegeben sind. Max. Leistung, Boost und Pause bleiben erhalten.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entität",
+                    "description": "Die zu konfigurierende Wallbox-Entität."
+                },
+                "days": {
+                    "name": "Tage",
+                    "description": "Zu löschende Wochentage (Standard: alle)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Maximale Ladeleistung festlegen",
+            "description": "Legt die bevorzugte maximale Ladeleistung in kW fest, gemeinsam mit der Eve Connect-App.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entität",
+                    "description": "Die zu konfigurierende Wallbox-Entität."
+                },
+                "power": {
+                    "name": "Leistung",
+                    "description": "Maximale Ladeleistung in kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Solarleistung"
+            },
+            "charging_status": {
+                "name": "Ladestatus"
+            },
+            "charging_limited_by": {
+                "name": "Laden begrenzt durch"
+            },
+            "session_energy": {
+                "name": "Sitzungsenergie"
+            },
+            "session_duration": {
+                "name": "Sitzungsdauer"
+            },
+            "session_max_power": {
+                "name": "Sitzung max. Leistung"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "API-Anmeldestatus"
+            },
+            "charging_restricted": {
+                "name": "Laden eingeschränkt"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Heartbeat-Intervall"
+            },
+            "max_charging_power": {
+                "name": "Maximale Ladeleistung"
+            },
+            "schedule_slot_power": {
+                "name": "Leistung Zeitfenster"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Display-Sprache"
+            },
+            "charge_control": {
+                "name": "Ladesteuerung"
+            },
+            "schedule_slot_days": {
+                "name": "Tage Zeitfenster"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Phasenumschaltung"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Solar-Ladezeitplan"
             },
             "dp_light_auto_dim": {
                 "name": "Display Auto-Dimmen"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy aktiviert"
+            },
+            "charging_schedule_enabled": {
+                "name": "Ladeplan"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Laden fortsetzen"
+            },
+            "add_schedule_slot": {
+                "name": "Zeitfenster hinzufügen"
+            },
+            "clear_schedule_days": {
+                "name": "Tage im Ladeplan löschen"
+            },
+            "replace_schedule_slots": {
+                "name": "Zeitfenster ersetzen"
+            },
+            "export_charging_history": {
+                "name": "Ladehistorie exportieren"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Proxy-Passwort"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Beginn Zeitfenster"
+            },
+            "schedule_slot_end": {
+                "name": "Ende Zeitfenster"
             }
         }
     },

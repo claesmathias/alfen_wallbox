@@ -48,10 +48,78 @@ COMMAND_CLEAR_TRANSACTIONS = "txerase"
 
 CHARGING_PROFILES = "chargingprofiles"
 CLEAR_CHARGING_PROFILES = "chargingprofiles?clear=all"
+CLEAR_CHARGING_SCHEDULE = "Clear Charging Schedule"
 BOOST_MODE = "Boost Mode"
 STOP_BOOST_MODE = "Stop Boost Mode"
 PAUSE_CHARGING = "Pause Charging"
 RESUME_CHARGING = "Resume Charging"
+ADD_SCHEDULE_SLOT = "Add Schedule Slot"
+REPLACE_SCHEDULE_SLOTS = "Replace Schedule Slots"
+CLEAR_SCHEDULE_DAYS = "Clear Schedule Days"
+EXPORT_HISTORY = "Export Charging History"
+
+# ---------------------------------------------------------------------------
+# Charging-profile protocol used by the official Eve Connect app
+# (reverse engineered from com.alfen.maple 1.5.4). Using the exact same IDs,
+# purpose and stack levels keeps Home Assistant and the app in sync: a pause or
+# boost started in one is shown correctly in the other.
+# ---------------------------------------------------------------------------
+PROFILE_PURPOSE_EXTERNAL = "ChargingStationExternalConstraints"
+PROFILE_ID_MAX_POWER = -19930828
+PROFILE_ID_BOOST = -19571004
+PROFILE_ID_PAUSE = -12122008
+PROFILE_ID_UK_DEFAULT = -19061964
+PROFILE_ID_APPLY_SCHEDULE = 234202408
+# One recurring weekly profile per weekday, Monday first.
+PROFILE_IDS_SCHEDULE_DAYS: tuple[int, ...] = (
+    234202401,
+    234202402,
+    234202403,
+    234202404,
+    234202405,
+    234202406,
+    234202407,
+)
+# Profile IDs written by integration versions <= 3.5.5 for boost / pause.
+LEGACY_PROFILE_ID_BOOST = -19930829
+LEGACY_PROFILE_ID_PAUSE = -19930830
+# Profiles that control charging but are not schedule time slots.
+SYSTEM_PROFILE_IDS: frozenset[int] = frozenset(
+    {
+        PROFILE_ID_MAX_POWER,
+        PROFILE_ID_BOOST,
+        PROFILE_ID_PAUSE,
+        PROFILE_ID_UK_DEFAULT,
+        PROFILE_ID_APPLY_SCHEDULE,
+        LEGACY_PROFILE_ID_BOOST,
+        LEGACY_PROFILE_ID_PAUSE,
+    }
+)
+BOOST_DURATION_SECONDS = 10800  # Eve Connect boosts for 3 hours
+SCHEDULE_ANCHOR_YEAR_MONTH = (2024, 4)  # 2024-04-01 is a Monday
+MAX_TIMESLOTS_PER_DAY = 7
+NOMINAL_PHASE_VOLTAGE = 230
+MIN_CHARGE_CURRENT = 6
+DEFAULT_NUMBER_OF_PHASES = 3
+ACTIVE_PHASE_VOLTAGE_THRESHOLD = 80  # a phase counts as present above 80 V
+MIN_CHARGING_POWER_KW = 1.4
+
+# Property IDs used by the Eve Connect home / power screens
+PROP_MAIN_STATE_SOCKET_1 = "2501_1"
+PROP_MAX_STATION_CURRENT = "2062_0"
+PROP_MAX_ALLOWED_PHASES = "2189_0"
+PROP_DATE_TIME = "2059_0"
+PROP_LIMITING_FACTOR = "218F_1"
+PROP_METER_ENERGY_SOCKET_1 = "2221_22"  # Wh
+PROP_METER_POWER_SOCKET_1 = "2221_16"  # W
+PROP_VOLTAGES_SOCKET_1 = ("2221_3", "2221_4", "2221_5")
+PROP_SMART_METER_POWER = "5221_16"  # W, net at the grid connection (+ import)
+PROP_SOLAR_CHARGING_MODE = "3280_1"
+PROP_SOLAR_OVERRIDE_SOCKET_1 = "3280_4"
+
+CHARGE_CONTROL_CHARGING = "charging"
+CHARGE_CONTROL_PAUSED = "paused"
+CHARGE_CONTROL_BOOST = "boost"
 
 CONF_REFRESH_CATEGORIES = "refresh_categories"
 
@@ -119,6 +187,33 @@ SERVICE_SET_COMFORT_POWER = "set_comfort_power"
 SERVICE_GET_CHARGING_PROFILES = "get_charging_profiles"
 SERVICE_ADD_CHARGING_PROFILE = "add_charging_profile"
 SERVICE_CLEAR_CHARGING_PROFILES = "clear_charging_profiles"
+SERVICE_SET_SCHEDULE_DAY = "set_schedule_day"
+SERVICE_CLEAR_CHARGING_SCHEDULE = "clear_charging_schedule"
+SERVICE_SET_MAX_POWER = "set_max_power"
+
+WEEKDAYS: tuple[str, ...] = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+# Day choices of the dashboard schedule editor
+SCHEDULE_DAY_OPTIONS: dict[str, list[int]] = {
+    "Every day": list(range(7)),
+    "Weekdays": [0, 1, 2, 3, 4],
+    "Weekend": [5, 6],
+    **{day: [index] for index, day in enumerate(WEEKDAYS)},
+}
+SCHEDULE_DAY_KEYS: dict[str, str] = {
+    "every_day": "Every day",
+    "weekdays": "Weekdays",
+    "weekend": "Weekend",
+    **{day.lower(): day for day in WEEKDAYS},
+}
 
 ALFEN_PRODUCT_MAP = {
     "NG900-60503": "Eve Single S-line, 1 phase, LED, type 2 socket",

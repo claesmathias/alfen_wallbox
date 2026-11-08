@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Ajouter un profil de charge",
-            "description": "Ajoute un créneau horaire de charge à la wallbox.",
+            "name": "Ajouter un créneau de charge",
+            "description": "Ajoute un créneau au planning de charge hebdomadaire (compatible Eve Connect). Les créneaux existants sont conservés ; les chevauchements sont refusés.",
             "fields": {
                 "entity_id": {
                     "name": "Entité",
@@ -201,7 +201,7 @@
                 },
                 "max_current": {
                     "name": "Courant max.",
-                    "description": "Courant de charge maximal en ampères (1-32A)."
+                    "description": "Courant de charge maximal en ampères."
                 },
                 "recurrency": {
                     "name": "Récurrence",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Jours",
                     "description": "Jours de la semaine pour la récurrence WEEKLY."
+                },
+                "max_power": {
+                    "name": "Puissance max.",
+                    "description": "Puissance maximale en kW (alternative au courant max.)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Entité",
                     "description": "L'entité de la wallbox à configurer."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Définir un jour du planning",
+            "description": "Remplace tous les créneaux de charge d'un jour de la semaine (compatible Eve Connect). Une liste vide efface le jour.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entité",
+                    "description": "L'entité de la borne à configurer."
+                },
+                "day": {
+                    "name": "Jour",
+                    "description": "Jour de la semaine à configurer."
+                },
+                "timeslots": {
+                    "name": "Créneaux",
+                    "description": "Liste de créneaux avec début et fin (HH:MM) et max_power (kW) ou max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Effacer le planning de charge",
+            "description": "Supprime les créneaux des jours indiqués, ou tout le planning si aucun jour n'est indiqué. La puissance max., le boost et la pause sont conservés.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entité",
+                    "description": "L'entité de la borne à configurer."
+                },
+                "days": {
+                    "name": "Jours",
+                    "description": "Jours à effacer (par défaut : tous)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Définir la puissance de charge maximale",
+            "description": "Définit la puissance de charge maximale souhaitée en kW, partagée avec l'application Eve Connect.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entité",
+                    "description": "L'entité de la borne à configurer."
+                },
+                "power": {
+                    "name": "Puissance",
+                    "description": "Puissance de charge maximale en kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Puissance solaire"
+            },
+            "charging_status": {
+                "name": "État de charge"
+            },
+            "charging_limited_by": {
+                "name": "Charge limitée par"
+            },
+            "session_energy": {
+                "name": "Énergie de la session"
+            },
+            "session_duration": {
+                "name": "Durée de la session"
+            },
+            "session_max_power": {
+                "name": "Puissance max. de la session"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "État de connexion API"
+            },
+            "charging_restricted": {
+                "name": "Charge restreinte"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Intervalle heartbeat"
+            },
+            "max_charging_power": {
+                "name": "Puissance de charge maximale"
+            },
+            "schedule_slot_power": {
+                "name": "Puissance du créneau"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Langue d'affichage"
+            },
+            "charge_control": {
+                "name": "Contrôle de charge"
+            },
+            "schedule_slot_days": {
+                "name": "Jours du créneau"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Commutation de phase"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Planning charge solaire"
             },
             "dp_light_auto_dim": {
                 "name": "Gradation auto écran"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy activé"
+            },
+            "charging_schedule_enabled": {
+                "name": "Planning de charge"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Reprendre la charge"
+            },
+            "add_schedule_slot": {
+                "name": "Ajouter un créneau"
+            },
+            "clear_schedule_days": {
+                "name": "Effacer les jours du planning"
+            },
+            "replace_schedule_slots": {
+                "name": "Remplacer les créneaux"
+            },
+            "export_charging_history": {
+                "name": "Exporter l'historique de charge"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Mot de passe proxy"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Début du créneau"
+            },
+            "schedule_slot_end": {
+                "name": "Fin du créneau"
             }
         }
     },

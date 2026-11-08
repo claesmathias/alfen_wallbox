@@ -94,7 +94,10 @@ get_charging_profiles:
       example: "sensor.alfen_wallbox_status_code_socket_1"
 
 add_charging_profile:
-  description: Add a charging schedule timeslot.
+  description: >-
+    Add a time slot to the weekly charging schedule (Eve Connect compatible).
+    Existing slots are kept; overlapping slots are rejected. A stop time at or
+    before the start time continues into the next day.
   fields:
     entity_id:
       description: Name(s) of entities to configure.
@@ -111,9 +114,19 @@ add_charging_profile:
       example: "10:00"
       selector:
         text:
+    max_power:
+      required: false
+      description: Maximum power in kW (like the Eve Connect app). Wins over max_current.
+      example: 7.4
+      selector:
+        number:
+          min: 1.4
+          max: 22.1
+          step: 0.1
+          unit_of_measurement: kW
     max_current:
-      required: true
-      description: Maximum charging current in Amperes (1-32A).
+      required: false
+      description: Maximum charging current in Amperes. Defaults to the station maximum.
       example: 16
       selector:
         number:
@@ -148,8 +161,72 @@ add_charging_profile:
             - "Sunday"
 
 clear_charging_profiles:
-  description: Clear all charging profiles from the wallbox.
+  description: >-
+    Clear ALL charging profiles from the wallbox: schedule, maximum power, boost
+    and pause. Use clear_charging_schedule to remove only the schedule.
   fields:
     entity_id:
       description: Name(s) of entities to configure.
       example: "sensor.alfen_wallbox_status_code_socket_1"
+
+set_schedule_day:
+  description: Replace all charging time slots of one weekday. An empty list clears the day.
+  fields:
+    entity_id:
+      description: Name(s) of entities to configure.
+      example: "sensor.alfen_wallbox_status_code_socket_1"
+    day:
+      required: true
+      example: "Monday"
+      selector:
+        select:
+          options:
+            - "Monday"
+            - "Tuesday"
+            - "Wednesday"
+            - "Thursday"
+            - "Friday"
+            - "Saturday"
+            - "Sunday"
+    timeslots:
+      required: false
+      example: '[{"start": "00:00", "end": "06:00", "max_power": 11}, {"start": "22:00", "end": "24:00"}]'
+      selector:
+        object:
+
+clear_charging_schedule:
+  description: Remove the schedule time slots of the given days (all days when empty).
+  fields:
+    entity_id:
+      description: Name(s) of entities to configure.
+      example: "sensor.alfen_wallbox_status_code_socket_1"
+    days:
+      required: false
+      example: ["Saturday", "Sunday"]
+      selector:
+        select:
+          multiple: true
+          options:
+            - "Monday"
+            - "Tuesday"
+            - "Wednesday"
+            - "Thursday"
+            - "Friday"
+            - "Saturday"
+            - "Sunday"
+
+set_max_power:
+  description: Set the preferred maximum charging power (shared with the Eve Connect app).
+  fields:
+    entity_id:
+      description: Name(s) of entities to configure.
+      example: "sensor.alfen_wallbox_status_code_socket_1"
+    power:
+      required: true
+      example: 7.4
+      selector:
+        number:
+          min: 1.4
+          max: 22.1
+          step: 0.1
+          unit_of_measurement: kW

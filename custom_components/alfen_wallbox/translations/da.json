@@ -184,8 +184,8 @@
             }
         },
         "add_charging_profile": {
-            "name": "Tilføj ladeprofil",
-            "description": "Tilføjer et ladetidspunkt til wallboxen.",
+            "name": "Tilføj ladetidsrum",
+            "description": "Tilføjer et tidsrum til den ugentlige ladeplan (kompatibel med Eve Connect). Eksisterende tidsrum bevares; overlappende afvises.",
             "fields": {
                 "entity_id": {
                     "name": "Enhed",
@@ -200,8 +200,8 @@
                     "description": "Sluttid for ladetidssporet (TT:MM)."
                 },
                 "max_current": {
-                    "name": "Maks strøm",
-                    "description": "Maksimal ladestrøm i ampere (1-32A)."
+                    "name": "Maks. strøm",
+                    "description": "Maksimal ladestrøm i ampere."
                 },
                 "recurrency": {
                     "name": "Gentagelse",
@@ -210,6 +210,10 @@
                 "days": {
                     "name": "Dage",
                     "description": "Ugedage for WEEKLY gentagelse."
+                },
+                "max_power": {
+                    "name": "Maks. effekt",
+                    "description": "Maksimal effekt i kW (alternativ til maks. strøm)."
                 }
             }
         },
@@ -220,6 +224,52 @@
                 "entity_id": {
                     "name": "Enhed",
                     "description": "Wallbox-enheden der skal konfigureres."
+                }
+            }
+        },
+        "set_schedule_day": {
+            "name": "Indstil plandag",
+            "description": "Erstatter alle ladetidsrum for én ugedag (kompatibel med Eve Connect). En tom liste rydder dagen.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Ladeboksens entitet, der skal konfigureres."
+                },
+                "day": {
+                    "name": "Dag",
+                    "description": "Ugedag, der skal konfigureres."
+                },
+                "timeslots": {
+                    "name": "Tidsrum",
+                    "description": "Liste over tidsrum med start og slut (TT:MM) og max_power (kW) eller max_current (A)."
+                }
+            }
+        },
+        "clear_charging_schedule": {
+            "name": "Ryd ladeplan",
+            "description": "Fjerner tidsrummene for de angivne dage, eller hele planen hvis ingen dage er angivet. Maks. effekt, boost og pause bevares.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Ladeboksens entitet, der skal konfigureres."
+                },
+                "days": {
+                    "name": "Dage",
+                    "description": "Ugedage, der skal ryddes (standard: alle)."
+                }
+            }
+        },
+        "set_max_power": {
+            "name": "Indstil maksimal ladeeffekt",
+            "description": "Indstiller den ønskede maksimale ladeeffekt i kW, delt med Eve Connect-appen.",
+            "fields": {
+                "entity_id": {
+                    "name": "Entitet",
+                    "description": "Ladeboksens entitet, der skal konfigureres."
+                },
+                "power": {
+                    "name": "Effekt",
+                    "description": "Maksimal ladeeffekt i kW."
                 }
             }
         }
@@ -300,6 +350,21 @@
             },
             "solar_power": {
                 "name": "Solkraft"
+            },
+            "charging_status": {
+                "name": "Ladestatus"
+            },
+            "charging_limited_by": {
+                "name": "Opladning begrænset af"
+            },
+            "session_energy": {
+                "name": "Sessionsenergi"
+            },
+            "session_duration": {
+                "name": "Sessionsvarighed"
+            },
+            "session_max_power": {
+                "name": "Sessionens maks. effekt"
             }
         },
         "binary_sensor": {
@@ -332,6 +397,9 @@
             },
             "https_api_login_status": {
                 "name": "API-loginstatus"
+            },
+            "charging_restricted": {
+                "name": "Opladning begrænset"
             }
         },
         "number": {
@@ -358,6 +426,12 @@
             },
             "heartbeat_interval": {
                 "name": "Heartbeat-interval"
+            },
+            "max_charging_power": {
+                "name": "Maksimal ladeeffekt"
+            },
+            "schedule_slot_power": {
+                "name": "Effekt for tidsrum"
             }
         },
         "select": {
@@ -375,14 +449,17 @@
             },
             "display_language": {
                 "name": "Skærmsprog"
+            },
+            "charge_control": {
+                "name": "Ladestyring"
+            },
+            "schedule_slot_days": {
+                "name": "Dage for tidsrum"
             }
         },
         "switch": {
             "lb_enable_phase_switching": {
                 "name": "Faseskift"
-            },
-            "lb_solar_charging_schedule": {
-                "name": "Solopladningsplan"
             },
             "dp_light_auto_dim": {
                 "name": "Skærm auto-dæmp"
@@ -398,6 +475,9 @@
             },
             "proxy_enabled": {
                 "name": "Proxy aktiveret"
+            },
+            "charging_schedule_enabled": {
+                "name": "Ladeplan"
             }
         },
         "button": {
@@ -433,6 +513,18 @@
             },
             "resume_charging": {
                 "name": "Genoptag opladning"
+            },
+            "add_schedule_slot": {
+                "name": "Tilføj tidsrum"
+            },
+            "clear_schedule_days": {
+                "name": "Ryd dage i planen"
+            },
+            "replace_schedule_slots": {
+                "name": "Erstat tidsrum"
+            },
+            "export_charging_history": {
+                "name": "Eksporter ladehistorik"
             }
         },
         "text": {
@@ -447,6 +539,14 @@
             },
             "proxy_password": {
                 "name": "Proxyadgangskode"
+            }
+        },
+        "time": {
+            "schedule_slot_start": {
+                "name": "Start for tidsrum"
+            },
+            "schedule_slot_end": {
+                "name": "Slut for tidsrum"
             }
         }
     },

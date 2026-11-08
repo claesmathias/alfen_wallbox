@@ -111,6 +111,14 @@ def _sanitize_latest_tag(latest_tag: dict | None) -> dict[str, Any] | None:
     return sanitized
 
 
+def _charging_profiles(device: Any) -> dict[str, Any]:
+    """Return the cached charging profiles keyed by ID."""
+    profiles = getattr(device, "charging_profiles_by_id", None)
+    if not isinstance(profiles, dict):
+        return {}
+    return {str(profile_id): profile for profile_id, profile in profiles.items()}
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: AlfenConfigEntry
 ) -> dict[str, Any]:
@@ -132,4 +140,6 @@ async def async_get_config_entry_diagnostics(
         "properties": _sanitize_properties(device.properties),
         # Sanitize RFID tag data
         "latest_tag": _sanitize_latest_tag(device.latest_tag),
+        # Charging profiles hold only schedules / limits, no personal data
+        "charging_profiles": _charging_profiles(device),
     }
