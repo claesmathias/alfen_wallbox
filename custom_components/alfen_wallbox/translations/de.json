@@ -274,6 +274,26 @@
             }
         }
     },
+    "device": {
+        "schedule": {
+            "name": "{name} Ladeplan"
+        },
+        "meter": {
+            "name": "{name} Energiezähler"
+        },
+        "load_balancing": {
+            "name": "{name} Solar & Lastmanagement"
+        },
+        "network": {
+            "name": "{name} Netzwerk"
+        },
+        "configuration": {
+            "name": "{name} Konfiguration"
+        },
+        "diagnostics": {
+            "name": "{name} Diagnose"
+        }
+    },
     "entity": {
         "sensor": {
             "status_socket_1": {

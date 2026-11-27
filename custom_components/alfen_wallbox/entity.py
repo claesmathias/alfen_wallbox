@@ -1,11 +1,14 @@
 """Base entity for Alfen Wallbox integration."""
 
+from typing import cast
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN as ALFEN_DOMAIN
 from .coordinator import AlfenConfigEntry, AlfenCoordinator
+from .devices import MAIN, SUB_DEVICES, device_group, entity_key
 
 
 class AlfenEntity(CoordinatorEntity[AlfenCoordinator], Entity):
@@ -21,13 +24,28 @@ class AlfenEntity(CoordinatorEntity[AlfenCoordinator], Entity):
         super().__init__(entry.runtime_data)
         self.coordinator = entry.runtime_data
 
-        device_info = self.coordinator.device.info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(ALFEN_DOMAIN, self.coordinator.device.name)},
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the (sub-)device this entity belongs to.
+
+        The group follows from the key in the unique ID; see devices.py.
+        """
+        device = self.coordinator.device
+        category = self.entity_category
+        group = device_group(
+            entity_key(self.unique_id, device.id),
+            category.value if category is not None else None,
+        )
+        if group == MAIN:
+            return main_device_info(self.coordinator)
+        return DeviceInfo(
+            identifiers={(ALFEN_DOMAIN, f"{device.name}_{group}")},
             manufacturer="Alfen",
-            model=device_info.model if device_info else "Unknown",
-            name=self.coordinator.device.name,
-            sw_version=device_info.firmware_version if device_info else "Unknown",
+            model=device.info.model if device.info else "Unknown",
+            name=f"{device.name} {SUB_DEVICES[group]}",
+            translation_key=group,
+            translation_placeholders={"name": device.name},
+            via_device=(ALFEN_DOMAIN, device.name),
         )
 
     @property
@@ -46,3 +64,8 @@ class AlfenEntity(CoordinatorEntity[AlfenCoordinator], Entity):
     async def async_added_to_hass(self) -> None:
         """Add listener for state changes."""
         await super().async_added_to_hass()
+
+
+def main_device_info(coordinator: AlfenCoordinator) -> DeviceInfo:
+    """Return the main wallbox device."""
+    return cast(DeviceInfo, coordinator.device.device_info)

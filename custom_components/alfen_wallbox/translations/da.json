@@ -274,6 +274,26 @@
             }
         }
     },
+    "device": {
+        "schedule": {
+            "name": "{name} Ladeplan"
+        },
+        "meter": {
+            "name": "{name} Energimåler"
+        },
+        "load_balancing": {
+            "name": "{name} Sol og belastningsbalancering"
+        },
+        "network": {
+            "name": "{name} Netværk"
+        },
+        "configuration": {
+            "name": "{name} Konfiguration"
+        },
+        "diagnostics": {
+            "name": "{name} Diagnostik"
+        }
+    },
     "entity": {
         "sensor": {
             "status_socket_1": {

@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.8.0] - 2026-11-27
+
+### Added
+
+- **Sub-devices** — the wallbox entities are grouped into sub-devices linked to the main
+  "Alfen Wallbox" device: *Charging schedule*, *Energy meter*, *Solar & load balancing*,
+  *Network*, *Configuration* and *Diagnostics*. Everyday charging entities (status, charge
+  control, power, session, boost / pause, login / logout, export) stay on the main device.
+  Entity IDs do not change, so dashboards and automations that use entity IDs keep
+  working; device-based automations (device triggers / actions) for entities that moved
+  need to be re-selected on the sub-device.
+
+### Fixed
+
+- Zeroconf discovery offered an already configured wallbox again as a new device when it
+  was set up with a host name (e.g. a local DNS name) instead of the discovered IP
+  address. The configured host is now resolved and compared by address; the host name is
+  kept instead of being replaced by the IP address.
+- Charging profiles were refreshed twice after "Clear charging profiles".
+
 ## [3.7.0] - 2026-11-08
 
 Aligned with the upstream project (leeyuentuen/alfen_wallbox, up to 2026-11-05).

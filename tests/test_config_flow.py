@@ -1,6 +1,7 @@
 """Test the Alfen Wallbox config flow."""
 
 from ipaddress import ip_address
+from unittest.mock import AsyncMock, patch
 
 from homeassistant import config_entries
 from homeassistant.const import (
@@ -192,6 +193,83 @@ async def test_zeroconf_updates_host(hass: HomeAssistant) -> None:
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert entry.data[CONF_HOST] == "192.168.1.200"
+
+
+RESOLVED_100 = [(2, 1, 6, "", ("192.168.1.100", 0))]
+
+
+async def test_zeroconf_adopts_entry_configured_by_host_name(hass: HomeAssistant) -> None:
+    """A wallbox set up with a DNS host name is recognised, not offered again."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "alfen.home",
+            CONF_NAME: "Alfen Wallbox",
+            CONF_USERNAME: "admin",
+            CONF_PASSWORD: "secret123",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with patch.object(hass.loop, "getaddrinfo", AsyncMock(return_value=RESOLVED_100)):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=zeroconf_info(),
+        )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert entry.unique_id == "ng920-61001-ace0012345"
+    assert entry.data[CONF_HOST] == "alfen.home"  # host name kept
+
+
+async def test_zeroconf_keeps_host_name_of_known_wallbox(hass: HomeAssistant) -> None:
+    """A known wallbox whose host name still resolves to it keeps that host name."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="ng920-61001-ace0012345",
+        data={
+            CONF_HOST: "alfen.home",
+            CONF_NAME: "Alfen Wallbox",
+            CONF_USERNAME: "admin",
+            CONF_PASSWORD: "secret123",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with patch.object(hass.loop, "getaddrinfo", AsyncMock(return_value=RESOLVED_100)):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_ZEROCONF},
+            data=zeroconf_info(),
+        )
+
+    assert result["reason"] == "already_configured"
+    assert entry.data[CONF_HOST] == "alfen.home"
+
+
+async def test_zeroconf_adopts_entry_configured_by_mdns_name(hass: HomeAssistant) -> None:
+    """A wallbox set up with its mDNS name is recognised without a DNS lookup."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_HOST: "ng920-61001-ace0012345.local",
+            CONF_NAME: "Alfen Wallbox",
+            CONF_USERNAME: "admin",
+            CONF_PASSWORD: "secret123",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": config_entries.SOURCE_ZEROCONF},
+        data=zeroconf_info(),
+    )
+
+    assert result["reason"] == "already_configured"
+    assert entry.unique_id == "ng920-61001-ace0012345"
 
 
 async def test_options_flow_init(hass: HomeAssistant, mock_config_entry: MockConfigEntry) -> None:

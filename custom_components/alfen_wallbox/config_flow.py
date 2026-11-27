@@ -1,5 +1,6 @@
 """Config flow for the Alfen Wallbox platform."""
 
+import asyncio
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
@@ -95,6 +96,27 @@ class AlfenOptionsFlowHandler(OptionsFlow):
         )
 
 
+async def _same_wallbox(configured_host: str | None, discovery_info: ZeroconfServiceInfo) -> bool:
+    """Return True when a configured host is the discovered wallbox.
+
+    The host may be an IP address, the mDNS name or a host name of the local
+    DNS (e.g. "alfen.home"); host names are resolved and compared by address.
+    """
+    if not configured_host:
+        return False
+    configured = configured_host.strip().lower().rstrip(".")
+    hostname = discovery_info.hostname.lower().rstrip(".")
+    addresses = {str(address) for address in discovery_info.ip_addresses} | {discovery_info.host}
+    if configured in addresses or configured in (hostname, hostname.removesuffix(".local")):
+        return True
+    try:
+        async with asyncio.timeout(5):
+            infos = await asyncio.get_running_loop().getaddrinfo(configured, None)
+    except (OSError, TimeoutError):
+        return False
+    return any(info[4][0] in addresses for info in infos)
+
+
 class AlfenFlowHandler(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
@@ -113,16 +135,22 @@ class AlfenFlowHandler(ConfigFlow, domain=DOMAIN):
         host = discovery_info.host
         device_name = discovery_info.hostname.rstrip(".").removesuffix(".local")
         unique_id = device_name.lower()
-
         await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: host})
 
-        # Adopt an entry that was set up by hand for the same host
         for entry in self._async_current_entries(include_ignore=False):
-            if entry.unique_id is None and entry.data.get(CONF_HOST) == host:
+            same_host = await _same_wallbox(entry.data.get(CONF_HOST), discovery_info)
+            if entry.unique_id == unique_id:
+                # Known wallbox: only follow a new address when the configured
+                # host (IP or host name) no longer points to it
+                if same_host:
+                    return self.async_abort(reason="already_configured")
+                self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+            if entry.unique_id is None and same_host:
+                # Adopt an entry that was set up by hand (IP or host name)
                 self.hass.config_entries.async_update_entry(entry, unique_id=unique_id)
                 return self.async_abort(reason="already_configured")
 
+        self._abort_if_unique_id_configured()  # ignored discoveries
         self._discovered_host = host
         self.context["title_placeholders"] = {"name": device_name}
         return await self.async_step_user()

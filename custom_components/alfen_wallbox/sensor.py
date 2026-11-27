@@ -1954,11 +1954,6 @@ class AlfenMainSensor(AlfenEntity):
         """Update the sensor."""
         await self.coordinator.device.async_update()
 
-    @property
-    def device_info(self):
-        """Return a device description for device registry."""
-        return self.coordinator.device.device_info
-
 
 class AlfenSensor(AlfenEntity, SensorEntity):
     """Representation of a Alfen Sensor."""

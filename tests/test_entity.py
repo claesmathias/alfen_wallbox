@@ -36,8 +36,11 @@ def mock_coordinator_fixture(mock_entry):
     coordinator.device.info.model = "NG920"
     coordinator.device.info.firmware_version = "5.12.0"
     coordinator.device.device_info = {
-        "identifiers": {(DOMAIN, "test")},
+        "identifiers": {(DOMAIN, "Test Wallbox")},
+        "manufacturer": "Alfen",
+        "model": "NG920",
         "name": "Test Wallbox",
+        "sw_version": "5.12.0",
     }
     coordinator.last_update_success = True
     mock_entry.runtime_data = coordinator
@@ -87,25 +90,12 @@ async def test_entity_device_info(mock_entry, mock_coordinator):
     """Test that entity has correct device info."""
     entity = AlfenEntity(mock_entry)
 
-    assert entity._attr_device_info is not None
-    assert entity._attr_device_info["name"] == "Test Wallbox"
-    assert entity._attr_device_info["manufacturer"] == "Alfen"
-    assert entity._attr_device_info["model"] == "NG920"
-    assert entity._attr_device_info["sw_version"] == "5.12.0"
-    assert (DOMAIN, "Test Wallbox") in entity._attr_device_info["identifiers"]
-
-
-async def test_entity_device_info_without_device_info(mock_entry, mock_coordinator):
-    """Test that entity handles missing device info gracefully."""
-    mock_coordinator.device.info = None
-
-    entity = AlfenEntity(mock_entry)
-
-    assert entity._attr_device_info is not None
-    assert entity._attr_device_info["name"] == "Test Wallbox"
-    assert entity._attr_device_info["manufacturer"] == "Alfen"
-    assert entity._attr_device_info["model"] == "Unknown"
-    assert entity._attr_device_info["sw_version"] == "Unknown"
+    assert entity.device_info is not None
+    assert entity.device_info["name"] == "Test Wallbox"
+    assert entity.device_info["manufacturer"] == "Alfen"
+    assert entity.device_info["model"] == "NG920"
+    assert entity.device_info["sw_version"] == "5.12.0"
+    assert (DOMAIN, "Test Wallbox") in entity.device_info["identifiers"]
 
 
 async def test_entity_coordinator_reference(mock_entry, mock_coordinator):
@@ -114,3 +104,16 @@ async def test_entity_coordinator_reference(mock_entry, mock_coordinator):
 
     assert entity.coordinator is mock_coordinator
     assert entity.coordinator.device.name == "Test Wallbox"
+
+
+async def test_entity_sub_device_info(mock_entry, mock_coordinator):
+    """Entities outside the main group get a sub-device linked to the wallbox."""
+    entity = AlfenEntity(mock_entry)
+    entity._attr_unique_id = "alfen_test-voltage_l1_socket_1"
+
+    info = entity.device_info
+    assert info["identifiers"] == {(DOMAIN, "Test Wallbox_meter")}
+    assert info["name"] == "Test Wallbox Energy meter"
+    assert info["translation_key"] == "meter"
+    assert info["translation_placeholders"] == {"name": "Test Wallbox"}
+    assert info["via_device"] == (DOMAIN, "Test Wallbox")

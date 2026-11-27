@@ -60,6 +60,18 @@ Other app-derived data: socket main state messages (`2501_1`), limiting factor `
 (single flag; groups vehicle / load balancing), solar mode `3280_1` (0 Disabled,
 1 Comfort, 2 Green). The dashboard is in [dashboards/alfen_wallbox.yaml](dashboards/alfen_wallbox.yaml).
 
+### Sub-devices (since 3.8.0)
+
+Entities are grouped into sub-devices (`via_device` → main device `(DOMAIN, device.name)`):
+schedule, meter, load_balancing, network, configuration, diagnostics.
+- Rules live in [devices.py](custom_components/alfen_wallbox/devices.py) (pure, tested in
+  `tests/test_devices.py`): the key at the end of the unique ID decides the group, topic
+  rules first, then the entity category; unmatched entities stay on the main device
+- `AlfenEntity.device_info` computes it — new entities need no extra code, but check
+  `test_main_device_keeps_only_everyday_entities` when adding keys
+- The main device is registered in `async_setup_entry` before the platforms load
+- Sub-device names are translated via the `device` section of strings.json / translations
+
 ### Data Model
 
 The wallbox organizes properties into **categories** that can be selectively refreshed:

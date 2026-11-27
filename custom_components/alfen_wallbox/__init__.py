@@ -13,7 +13,7 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
     CAT_LOGS,
@@ -25,6 +25,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import AlfenConfigEntry, AlfenCoordinator, options_update_listener
+from .entity import main_device_info
 from .export import AlfenExportView
 
 PLATFORMS = [
@@ -95,6 +96,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: AlfenConfigEntry)
     await coordinator.async_config_entry_first_refresh()
 
     config_entry.runtime_data = coordinator
+    # Register the main device first: the sub-devices link to it (via_device)
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id, **main_device_info(coordinator)
+    )
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
     config_entry.async_on_unload(config_entry.add_update_listener(options_update_listener))

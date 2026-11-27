@@ -1452,7 +1452,6 @@ class AlfenDevice:
         """Clear ALL charging profiles (schedule, max power, boost and pause)."""
         await self._profile_post(f"{CHARGING_PROFILES}?clear=all", None)
         await self._refresh_after_profile_change()
-        await self._refresh_after_profile_change()
 
     async def _clear_profiles(self, *profile_ids: int) -> None:
         """Clear profiles; legacy IDs are only cleared when actually present."""

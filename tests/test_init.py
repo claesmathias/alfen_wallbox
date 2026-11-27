@@ -126,6 +126,7 @@ async def test_config_entry_migration_v1_to_v2(
         mock_device.init = AsyncMock(return_value=True)
         mock_device.async_update = AsyncMock(return_value=True)
         mock_device.get_static_properties = False
+        mock_device.device_info = {"identifiers": {(DOMAIN, "Test Wallbox")}, "name": "Test Wallbox"}
 
         assert await hass.config_entries.async_setup(v1_entry.entry_id)
         await hass.async_block_till_done()
